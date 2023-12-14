@@ -23,6 +23,9 @@ from spyglass.common import (
     get_electrode_indices,
 )
 from spyglass.position.v1 import TrodesPosV1
+from spyglass.position import PositionOutput
+from spyglass.position_linearization.v1 import LinearizedPositionV1, TrackGraph
+
 import sys
 
 import sys
@@ -91,6 +94,7 @@ def get_running_intervals(
 
 def lineartrack_position_filter(key: dict) -> list:
     """get list of interval times when rat is NOT at the ends of the linear track
+    # 12.12.23: switch to using linearized position instead of x position
 
     Parameters
     ----------
@@ -102,23 +106,37 @@ def lineartrack_position_filter(key: dict) -> list:
     list
         list of time intervals when rat is not at the ends of the linear track
     """
-    df_ = (TrodesPosV1() & key).fetch1_dataframe()
-    linear_limits = [
-        np.nanmin(np.asarray(df_["position_x"])) + 20,
-        np.nanmax(np.asarray(df_["position_x"])) - 20,
-    ]
+
+    # get the position data
+    if not "pos_merge_id" in key:
+        merge_id = (PositionOutput.TrodesPosV1 & key).fetch1("merge_id")
+        key["pos_merge_id"] = merge_id
+    # get the linearized position data
+    df_ = (LinearizedPositionV1() & key).fetch1_dataframe()
+    x = np.asarray(df_["linear_position"])
+
+    # get the linear limits
+    track_key = {
+        "track_graph_name": (LinearizedPositionV1() & key).fetch1("track_graph_name")
+    }
+    distance = (
+        (TrackGraph() & track_key).get_networkx_track_graph().edges[[0, 1]]["distance"]
+    )
+    linear_limits = [20, distance - 20]
+
+    # filter
     print("linear_limits", linear_limits)
-    valid_pos = (
-        (np.asarray(df_["position_x"]) > linear_limits[0])
-        & (np.asarray(df_["position_x"]) < linear_limits[1])
-    ).astype(int)
+    valid_pos = ((x > linear_limits[0]) & (x < linear_limits[1])).astype(int)
     valid_pos = np.append(
         [0],
         valid_pos,
     )
     interval_st = df_.index[np.where(np.diff(valid_pos) == 1)[0]]
     interval_end = df_.index[np.where(np.diff(valid_pos) == -1)[0]]
-    return [[st, en] for st, en in zip(interval_st, interval_end)]
+    valid_intervals = [[st, en] for st, en in zip(interval_st, interval_end)]
+    for interval in valid_intervals:
+        assert interval[0] < interval[1]
+    return valid_intervals
 
 
 def wtrack_position_filter(key: dict) -> list:
