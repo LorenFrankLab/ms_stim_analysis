@@ -108,117 +108,122 @@ def gamma_theta_nesting(
     if len(set((dataset * Session).fetch("subject_id"))) > 1:
         raise NotImplementedError("Only one subject allowed")
 
-    power_opto = []
-    power_control = []
-    phase_opto = []
-    phase_control = []
-
-    for nwb_file_name, interval_list_name in zip(
-        nwb_file_name_list, interval_list_name_list
-    ):
-        basic_key = {
-            "nwb_file_name": nwb_file_name,
-            "target_interval_list_name": interval_list_name,
-        }
-        print(basic_key)
-
-        # define the key for the band used to define phase
-        phase_key = {**basic_key, "filter_name": phase_filter_name}
-        # define the key for the band used to define amplitude
-        power_filter = "Slow Gamma 25-55 Hz"
-        # power_filter = "Fast Gamma 65-100 Hz"
-        power_key = {**basic_key, "filter_name": power_filter}
-        print(power_key)
-        print(phase_key)
-
-        # get analytic band power
-        ref_elect_index, basic_key = get_ref_electrode_index(basic_key)
-        power_df = (LFPBandV1 & power_key).compute_signal_power([ref_elect_index])
-        power_ = np.asarray(power_df[power_df.columns[0]])
-        power_timestamps = power_df.index
-
-        # get phase
-        if not (LFPBandV1 & phase_key) or not (LFPBandV1 & power_key):
-            continue
-        phase_df = (LFPBandV1 & phase_key).compute_signal_phase([ref_elect_index])
-        phase_timestamps = phase_df.index
-        phase_ = np.asarray(phase_df)[:, 0]
-
-        # get test and control run intervals
-        pos_key = {
-            **basic_key,
-            "interval_list_name": basic_key["target_interval_list_name"],
-        }
-        opto_run_intervals, control_run_intervals = get_running_valid_intervals(
-            pos_key, filter_speed=filter_speed, seperate_optogenetics=True
-        )
-
-        for intervals, power, phase in zip(
-            [opto_run_intervals, control_run_intervals],
-            [power_opto, power_control],
-            [phase_opto, phase_control],
-        ):
-            valid_times = interval_list_contains(intervals, phase_timestamps)
-            ind_power = np.digitize(valid_times, power_timestamps)
-            power.extend(power_[ind_power - 1])
-            ind_phase = np.digitize(valid_times, phase_timestamps)
-            phase.extend(phase_[ind_phase - 1])
-
-    if len(phase_opto) == 0 or len(phase_control) == 0:
-        return None, None, None, None
-
-    fig, ax = plt.subplots(
-        1, 4, figsize=(20, 6), gridspec_kw={"width_ratios": [3, 3, 3, 1]}
+    # make the figure
+    fig, ax_all = plt.subplots(
+        2, 4, figsize=(20, 6), gridspec_kw={"width_ratios": [3, 3, 3, 1]}, sharex="col"
     )
-
-    for a, phase, power, color, name in zip(
-        ax[:2],
-        [phase_opto, phase_control],
-        [power_opto, power_control],
-        ["firebrick", "cornflowerblue"],
-        ["opto", "control"],
+    for power_filter, ax in zip(
+        ["Slow Gamma 25-55 Hz", "Fast Gamma 65-100 Hz"], ax_all
     ):
-        H, xedges, yedges = np.histogram2d(
-            phase,
-            np.log10(power),
-            bins=[np.linspace(0, 2 * np.pi, 100), np.linspace(0, 5, 30)],
-        )
-        # H, xedges, yedges = np.histogram2d(
-        #     phase,
-        #     power,
-        #     bins=[np.linspace(0, 2 * np.pi, 100), np.linspace(0, 1e5, 100)],
-        # )
-        extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
-        H = H / H.sum(axis=1)[:, None]
-        a.imshow(
-            H.T,
-            origin="lower",
-            extent=extent,
-            cmap=plt.cm.plasma,
-            interpolation="nearest",
-            aspect=float(np.diff(extent)[0]) / np.diff(extent)[-1],
-        )
-        a.set_xlabel("Phase")
-        a.set_ylabel("log10 Power")
-        a.set_title(name)
+        power_opto = []
+        power_control = []
+        phase_opto = []
+        phase_control = []
 
-        # val, bins, ind = scipy.stats.binned_statistic(phase, np.log10(power), bins=100)
-        # # val, bins, ind = scipy.stats.binned_statistic(phase, power, bins=100)
-        # bin_centers = bins[:-1] + np.diff(bins) / 2
+        for nwb_file_name, interval_list_name in zip(
+            nwb_file_name_list, interval_list_name_list
+        ):
+            basic_key = {
+                "nwb_file_name": nwb_file_name,
+                "target_interval_list_name": interval_list_name,
+            }
+            print(basic_key)
 
-        bins = np.linspace(0, 2 * np.pi, 65)
-        labels = np.digitize(phase, bins)
-        val, rng_lo, rng_hi = bootstrap_binned(labels, np.log10(power), n_boot=1000)
-        bin_centers = bins[:-1] + np.diff(bins) / 2
+            # define the key for the band used to define phase
+            phase_key = {
+                **basic_key,
+                "filter_name": phase_filter_name,
+                "filter_sampling_rate": 1000,
+            }
+            # define the key for the band used to define amplitude
+            power_key = {**basic_key, "filter_name": power_filter}
+            print(power_key)
+            print(phase_key)
 
-        ax[2].plot(bin_centers, val, color=color, label=name)
-        ax[2].fill_between(bin_centers, rng_lo, rng_hi, facecolor=color, alpha=0.3)
-        ax[2].set_xlabel("Phase")
-        ax[2].set_ylabel(f"log10 Power {power_filter}")
+            # get analytic band power
+            ref_elect_index, basic_key = get_ref_electrode_index(basic_key)
+            power_df = (LFPBandV1 & power_key).compute_signal_power([ref_elect_index])
+            power_ = np.asarray(power_df[power_df.columns[0]])
+            power_timestamps = power_df.index
 
-    ax[2].spines[["top", "right"]].set_visible(False)
-    ax[2].set_xlim([0, 2 * np.pi])
-    ax[2].legend()
+            # get phase
+            if not (LFPBandV1 & phase_key) or not (LFPBandV1 & power_key):
+                continue
+            phase_df = (LFPBandV1 & phase_key).compute_signal_phase([ref_elect_index])
+            phase_timestamps = phase_df.index
+            phase_ = np.asarray(phase_df)[:, 0]
+
+            # get test and control run intervals
+            pos_key = {
+                **basic_key,
+                "interval_list_name": basic_key["target_interval_list_name"],
+            }
+            opto_run_intervals, control_run_intervals = get_running_valid_intervals(
+                pos_key, filter_speed=filter_speed, seperate_optogenetics=True
+            )
+
+            for intervals, power, phase in zip(
+                [opto_run_intervals, control_run_intervals],
+                [power_opto, power_control],
+                [phase_opto, phase_control],
+            ):
+                valid_times = interval_list_contains(intervals, phase_timestamps)
+                ind_power = np.digitize(valid_times, power_timestamps)
+                power.extend(power_[ind_power - 1])
+                ind_phase = np.digitize(valid_times, phase_timestamps)
+                phase.extend(phase_[ind_phase - 1])
+
+        if len(phase_opto) == 0 or len(phase_control) == 0:
+            return None, None, None, None
+
+        for a, phase, power, color, name in zip(
+            ax[:2],
+            [phase_opto, phase_control],
+            [power_opto, power_control],
+            ["firebrick", "cornflowerblue"],
+            ["opto", "control"],
+        ):
+            H, xedges, yedges = np.histogram2d(
+                phase,
+                np.log10(power),
+                bins=[np.linspace(0, 2 * np.pi, 100), np.linspace(0, 5, 30)],
+            )
+            # H, xedges, yedges = np.histogram2d(
+            #     phase,
+            #     power,
+            #     bins=[np.linspace(0, 2 * np.pi, 100), np.linspace(0, 1e5, 100)],
+            # )
+            extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+            H = H / H.sum(axis=1)[:, None]
+            a.imshow(
+                H.T,
+                origin="lower",
+                extent=extent,
+                cmap=plt.cm.plasma,
+                interpolation="nearest",
+                aspect=float(np.diff(extent)[0]) / np.diff(extent)[-1],
+            )
+            a.set_xlabel("Phase")
+            a.set_ylabel("log10 Power")
+            a.set_title(name)
+
+            # val, bins, ind = scipy.stats.binned_statistic(phase, np.log10(power), bins=100)
+            # # val, bins, ind = scipy.stats.binned_statistic(phase, power, bins=100)
+            # bin_centers = bins[:-1] + np.diff(bins) / 2
+
+            bins = np.linspace(0, 2 * np.pi, 65)
+            labels = np.digitize(phase, bins)
+            val, rng_lo, rng_hi = bootstrap_binned(labels, np.log10(power), n_boot=1000)
+            bin_centers = bins[:-1] + np.diff(bins) / 2
+
+            ax[2].plot(bin_centers, val, color=color, label=name)
+            ax[2].fill_between(bin_centers, rng_lo, rng_hi, facecolor=color, alpha=0.3)
+            ax[2].set_xlabel("Phase")
+            ax[2].set_ylabel(f"log10 Power {power_filter}")
+
+        ax[2].spines[["top", "right"]].set_visible(False)
+        ax[2].set_xlim([0, 2 * np.pi])
+        ax[2].legend()
 
     # Table with information about the dataset
     the_table = ax[3].table(
@@ -229,9 +234,11 @@ def gamma_theta_nesting(
         loc="right",
         colWidths=[1, 1],
     )
-    ax[3].spines[["top", "right", "left", "bottom"]].set_visible(False)
-    ax[3].set_xticks([])
-    ax[3].set_yticks([])
+
+    for a in ax_all[:, 3]:
+        a.spines[["top", "right", "left", "bottom"]].set_visible(False)
+        a.set_xticks([])
+        a.set_yticks([])
 
     fig.suptitle(f"{dataset_key['animal']}: {dataset_key['period_ms']}ms period")
     return phase_opto, phase_control, power_opto, power_control
