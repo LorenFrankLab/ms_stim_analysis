@@ -24,7 +24,7 @@ from spyglass.common import (
 )
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.position import PositionOutput
-from spyglass.position_linearization.v1 import LinearizedPositionV1, TrackGraph
+from spyglass.linearization.v1 import LinearizedPositionV1, TrackGraph
 
 import sys
 
@@ -111,6 +111,7 @@ def lineartrack_position_filter(key: dict) -> list:
     if not "pos_merge_id" in key:
         merge_id = (PositionOutput.TrodesPosV1 & key).fetch1("merge_id")
         key["pos_merge_id"] = merge_id
+        key["track_graph_name"] = "ms_lineartrack"
     # get the linearized position data
     df_ = (LinearizedPositionV1() & key).fetch1_dataframe()
     x = np.asarray(df_["linear_position"])
