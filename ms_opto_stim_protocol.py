@@ -282,6 +282,7 @@ class OptoStimProtocol(dj.Computed):
                 "optogenetic_protocol": params["optogenetic_protocol"],
             }
         )
+        self.make_opto_intervals(key)
 
     def get_protocol_type(self, key):
         return (self & key).fetch("optogenetic_protocol")
@@ -367,6 +368,25 @@ class OptoStimProtocol(dj.Computed):
         duration_off = t_switch_on - t_switch_off[:-1]
         ind_new_cycle = np.where(duration_off > threshold)[0]
         return t_switch_on[ind_new_cycle]
+
+    @staticmethod
+    def make_opto_intervals(key):
+        test_interval = (OptoStimProtocol & key).fetch1("test_intervals")
+        control_interval = (OptoStimProtocol & key).fetch1("control_intervals")
+
+        test_interval_key = {
+            "nwb_file_name": key["nwb_file_name"],
+            "interval_list_name": key["interval_list_name"] + "_opto_test_interval",
+            "valid_times": test_interval,
+        }
+        sgc.IntervalList().insert1(test_interval_key, skip_duplicates=True)
+        control_interval_key = {
+            "nwb_file_name": key["nwb_file_name"],
+            "interval_list_name": key["interval_list_name"] + "_opto_control_interval",
+            "valid_times": control_interval,
+        }
+        sgc.IntervalList().insert1(control_interval_key, skip_duplicates=True)
+        return
 
 
 @schema
