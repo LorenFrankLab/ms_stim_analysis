@@ -109,21 +109,27 @@ def lineartrack_position_filter(key: dict) -> list:
 
     # get the position data
     if not "pos_merge_id" in key:
-        merge_id = (PositionOutput.TrodesPosV1 & key).fetch1("merge_id")
+        merge_id = (
+            (PositionOutput.TrodesPosV1 & key)
+            & "trodes_pos_params_name LIKE '%upsampled'"
+        ).fetch1("merge_id")
         key["pos_merge_id"] = merge_id
-        key["track_graph_name"] = "ms_lineartrack"
     # get the linearized position data
-    df_ = (LinearizedPositionV1() & key).fetch1_dataframe()
+    df_ = (
+        LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_lineartrack%'"
+    ).fetch1_dataframe()
     x = np.asarray(df_["linear_position"])
 
     # get the linear limits
     track_key = {
-        "track_graph_name": (LinearizedPositionV1() & key).fetch1("track_graph_name")
+        "track_graph_name": (
+            LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_lineartrack%'"
+        ).fetch1("track_graph_name")
     }
     distance = (
         (TrackGraph() & track_key).get_networkx_track_graph().edges[[0, 1]]["distance"]
     )
-    linear_limits = [20, distance - 20]
+    linear_limits = [10, distance - 10]
 
     # filter
     print("linear_limits", linear_limits)
@@ -153,7 +159,9 @@ def wtrack_position_filter(key: dict) -> list:
     list
         list of time intervals when rat is not at the ports of the w-track
     """
-    df_ = (TrodesPosV1() & key).fetch1_dataframe()
+    df_ = (
+        (TrodesPosV1() & key) & "trodes_pos_params_name LIKE '%upsampled'"
+    ).fetch1_dataframe()
     wtrack_limit = np.nanmin(np.asarray(df_["position_y"])) + 25
     print("wtrack_limit", wtrack_limit)
     valid_pos = (np.asarray(df_["position_y"]) > wtrack_limit).astype(int)
