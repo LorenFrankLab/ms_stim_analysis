@@ -2344,63 +2344,72 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
                 axis=1,
                 method="fft",
             )
+            for i, f in enumerate(frequencies):
+                width = fs / f / 2
+                C[i, :] = np.convolve(
+                    np.abs(C[i, :]), np.ones(int(width)) / width, mode="same"
+                )
 
             spectrograms.append(C[:, padding:-padding])
-            # # print((~np.isnan(C)).all())
-            # # print(np.max(C))
-            # dat = np.nansum(np.abs(C[:, padding:-padding]) ** 2, axis=0)[
-            #     :, 0
-            # ]  # add up the power across scales
-            # # smooth with a boxcar filter
-            # if "period_ms" in dataset_key:
-            #     filter_size = dataset_key["period_ms"]
-            # else:
-            #     filter_size = 125
-            # dat = np.convolve(dat, np.ones(filter_size) / filter_size, mode="same")
 
-            # # print(np.max(dat))
-            # dat = dat / np.nanmax(dat)
-            # # print((~np.isnan(dat)).all())
-            # power_curves.append(dat)
-            # if len(spectrograms) > 10:
-            #     break
     if len(spectrograms) == 0:
         return fig
     tp = np.arange(lfp_trace_window[0], lfp_trace_window[1]) / fs
     # plot
     if fig is None:
-        fig = plt.figure()
+        fig, ax = plt.subplots(ncols=2, figsize=(12, 6))
     spectrograms = np.array(spectrograms)
     avg_spectrogram = np.nanmean(np.abs(spectrograms), axis=0)
-    fig.gca().matshow(
+    ax[0].matshow(
         avg_spectrogram,
         cmap="plasma",
         extent=[tp[0], tp[-1], freq[0], freq[-1]],
         aspect="auto",
         origin="lower",
     )
-    fig.gca().set_xlabel("time (s)")
-    fig.gca().set_ylabel("frequency (Hz)")
-    fig.gca().vlines(0, freq[0], freq[-1], color="white", ls="--")
+    ax[0].set_xlabel("time (s)")
+    ax[0].set_ylabel("frequency (Hz)")
+    ax[0].vlines(0, freq[0], freq[-1], color="white", ls="--")
     if "period_ms" in dataset_key:
         drive_freq = 1000 / dataset_key["period_ms"]
-        fig.gca().hlines(drive_freq, 0, tp[-1], color="white", ls="--")
+        ax[0].hlines(drive_freq, 0, tp[-1], color="white", ls="--")
+        ax[0].hlines(drive_freq, 0, tp[-1], color="thistle", ls="--")
+
+    track_freq = [
+        (6, 10),
+        (14, 18),
+        (20, 24),
+    ]
+    if "period_ms" in dataset_key:
+        central = 1000.0 / dataset_key["period_ms"]
+        track_freq.append((central - 0.5, central + 0.5))
+
+    for i, f in enumerate(track_freq):
+        ind_freq = np.where((freq >= f[0]) & (freq <= f[1]))[0]
+        c = plt.cm.Set1(i / len(track_freq))
+
+        power_traces = np.nanmean(np.abs(spectrograms)[:, ind_freq, :], axis=1)
+        ax[1].plot(
+            tp,
+            np.nanmedian(power_traces, axis=0),
+            label=f"{np.round(f[0],2)}-{np.round(f[1],2)} Hz",
+            color=c,
+        )
+        ax[1].fill_between(
+            tp,
+            np.nanpercentile(power_traces, 25, axis=0),
+            np.nanpercentile(power_traces, 75, axis=0),
+            alpha=0.1,
+            facecolor=c,
+        )
+
+    ax[1].legend()
+    ax[1].set_xlabel("time (s)")
+    ax[1].set_ylabel("Frequency power")
+
+    peak_freq = freq[np.nanargmax(avg_spectrogram, axis=0)]
+    ax[0].plot(tp, peak_freq, color="limegreen", ls="dashdot", lw=2.5)
 
     if return_data:
         return fig, spectrograms
     return fig
-    # power_curves = np.array(power_curves)
-    # print(power_curves.shape)
-    # plt.plot(tp, np.median(power_curves, axis=0), color=color)
-    # plt.fill_between(
-    #     tp,
-    #     np.percentile(power_curves, 25, axis=0),
-    #     np.percentile(power_curves, 75, axis=0),
-    #     facecolor=color,
-    #     alpha=0.2,
-    # )
-    # fig.gca().spines[["right", "top"]].set_visible(False)
-    # fig.gca().set_xlabel("time (s)")
-    # fig.gca().set_ylabel("normalized power")
-    # fig.gca().set_xlim(tp[0], tp[-1])
-    # return fig  # , power_curves
