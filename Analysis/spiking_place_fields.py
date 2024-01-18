@@ -33,6 +33,7 @@ def decoding_place_fields(dataset_key: dict, return_correlations=False):
     # get the autocorrelegrams
     place_field_list = [[], []]
     mean_rates_list = [[], []]
+    place_bin_centers = None
     for nwb_file_name, pos_interval in zip(nwb_file_names, pos_interval_names):
         interval_name = (
             (
@@ -77,6 +78,21 @@ def decoding_place_fields(dataset_key: dict, return_correlations=False):
                 np.array(list(fit_model.encoding_model_.values())[0]["mean_rates"])
                 * n_bins
             )
+
+            place = list(
+                (
+                    SortedSpikesDecodingV1
+                    & key
+                    & {"encoding_interval": pos_interval + "_opto_test_interval"}
+                )
+                .load_model()
+                .encoding_model_.values()
+            )[0]["environment"].place_bin_centers_
+            place = [float(x) for x in place]
+            if place_bin_centers is None:
+                place_bin_centers = place
+            else:
+                assert np.all(place_bin_centers == place), "Place bins don't match"
     # only consider units with a minimum number of events in each condition
     min_rate = 100
     ind_valid = np.logical_and(
@@ -103,6 +119,14 @@ def decoding_place_fields(dataset_key: dict, return_correlations=False):
     ax[1].imshow(
         place_field_list[1][ind_sort], aspect="auto", cmap="bone_r", origin="lower"
     )
+    for a in ax[:2]:
+        a.set_xticks(
+            np.linspace(0, place_field_list[0].shape[1], 5),
+            labels=np.round(
+                np.linspace(place_bin_centers[0], place_bin_centers[-1], 5), 2
+            ),
+        )
+
     ax[1].set_title("Test")
     ax[0].set_xlabel("Position (cm)")
     ax[1].set_xlabel("Position (cm)")
