@@ -90,11 +90,14 @@ def opto_spiking_dynamics(
         zip(dataset.fetch("nwb_file_name")[:3], dataset.fetch("interval_list_name")[:3])
     ):
         interval_name = (
-            PositionIntervalMap()
-            & {
-                "nwb_file_name": nwb_file_name,
-                "position_interval_name": position_interval_name,
-            }
+            (
+                PositionIntervalMap()
+                & {
+                    "nwb_file_name": nwb_file_name,
+                    "position_interval_name": position_interval_name,
+                }
+            )
+            * TaskEpoch()
         ).fetch1("interval_list_name")
         basic_key = {
             "nwb_file_name": nwb_file_name,
@@ -121,6 +124,25 @@ def opto_spiking_dynamics(
         elif marks == "all_pulses":
             stim, time = (OptoStimProtocol() & opto_key).get_stimulus(opto_key)
             pulse_timepoints = time[stim == 1]
+        elif marks == "odd_pulses":
+            # get times of firt pulse in cylce
+            t_mark_cycle = OptoStimProtocol().get_cylcle_begin_timepoints(opto_key)
+            # get times of all stimulus
+            stim, t_mark = OptoStimProtocol().get_stimulus(opto_key)
+            t_mark = t_mark[stim == 1]
+            # label each pulse as its count in the cycle
+            pulse_count = np.zeros_like(t_mark)
+            mark_ind_cycle = [np.where(t_mark == t_)[0][0] for t_ in t_mark_cycle]
+            pulse_count[mark_ind_cycle] = 1
+            count = 1
+            for i in range(pulse_count.size):
+                if pulse_count[i] == 1:
+                    count = 1
+                pulse_count[i] = count
+                count += 1
+            pulse_count = pulse_count - 1  # 0 index the count
+            pulse_timepoints = t_mark[pulse_count % 2 == 1]
+
         elif marks == "theta_peaks":
             # get all running theta peaks
             band_key = {
@@ -148,6 +170,7 @@ def opto_spiking_dynamics(
                 pulse_timepoints.append(t)
                 for dummy_count in range(10):
                     pulse_timepoints.append(t + dummy_count * 1 / dummy_freq)
+            pulse_timepoints = np.asarray(pulse_timepoints)
 
         else:
             raise ValueError(
@@ -269,18 +292,18 @@ def opto_spiking_dynamics(
         ax[0].fill_between(
             [0, 0 + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.3
         )
-    elif marks == "all_pulses" and period is not None:
+    elif marks in ["all_pulses", "odd_pulses"] and period is not None:
         if period is not None:
             t = 0
             while t < tp.max():
                 ax[0].fill_between(
-                    [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.3
+                    [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
                 )
                 t += period
             t = -period
             while t + 40 > tp.min():
                 ax[0].fill_between(
-                    [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.3
+                    [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
                 )
                 t -= period
 
