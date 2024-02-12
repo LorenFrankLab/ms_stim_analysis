@@ -2,7 +2,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-from spyglass.spikesorting import CuratedSpikeSorting
+from spyglass.spikesorting.v0 import CuratedSpikeSorting
 import datajoint as dj
 
 schema = dj.schema("sambray_spiking")
