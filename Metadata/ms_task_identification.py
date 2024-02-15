@@ -2,7 +2,7 @@ import datajoint as dj
 
 from spyglass.common import TaskEpoch
 
-from metadata_helpers import get_ms_nwbf_epoch_keys
+from Metadata.metadata_helpers import get_ms_nwbf_epoch_keys
 
 schema = dj.schema("ms_metadata")
 

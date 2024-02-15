@@ -6,9 +6,8 @@ from typing import Tuple
 
 import os
 
-os.chdir("/home/sambray/Documents/MS_analysis_Jen/")
-from ms_task_identification import TaskIdentification
-from ms_interval import EpochIntervalListName
+from Metadata.ms_task_identification import TaskIdentification
+from Time_and_trials.ms_interval import EpochIntervalListName
 
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
 from ms_opto_stim_protocol import (
