@@ -37,8 +37,7 @@ from spyglass.position.v1 import TrodesPosV1
 from .position_analysis import get_running_intervals, filter_position_ports
 from .utils import convert_delta_marks_to_timestamp_values
 
-os.chdir("/home/sambray/Documents/MS_analysis_Jen/")
-from ms_interval import EpochIntervalListName
+from Time_and_trials.ms_interval import EpochIntervalListName
 
 
 import sys

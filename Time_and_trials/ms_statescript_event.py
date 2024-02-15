@@ -2,7 +2,7 @@ import numpy as np
 import datajoint as dj
 from spyglass.common import StateScriptFile
 
-from ms_task_identification import TaskIdentification
+from Metadata.ms_task_identification import TaskIdentification
 
 # Needed for table definitions (do not remove):
 from Datajoint_nwb_utils.datajoint_table_helpers import insert1_print

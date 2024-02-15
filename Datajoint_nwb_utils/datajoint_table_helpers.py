@@ -5,9 +5,9 @@ import copy
 from spyglass.common import (IntervalList,
                              Session)
 
-from ms_interval import EpochIntervalListName
-from string_helpers import snake_to_camel_case
-from vector_helpers import unpack_single_element
+from Time_and_trials.ms_interval import EpochIntervalListName
+from Utils.string_helpers import snake_to_camel_case
+from Utils.vector_helpers import unpack_single_element
 
 
 def fetch1_tolerate_no_entry(table,
