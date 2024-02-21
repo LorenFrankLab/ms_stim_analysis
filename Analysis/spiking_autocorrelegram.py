@@ -42,6 +42,7 @@ def autocorrelegram(
     # get the autocorrelegrams
     results = [[], []]
     counts = []
+    stim_results = []
     for nwb_file_name, pos_interval in zip(nwb_file_names, pos_interval_names):
         interval_name = (
             (
@@ -128,10 +129,21 @@ def autocorrelegram(
                 bins = bins[:-1] + np.diff(bins) / 2
                 vals = vals / vals.sum()
                 results[i].append(vals)
-        # plt.plot(bins,vals)
-        # plt.yscale('log')
-        # plt.ylim(1e-3,1e-2)
+
+        stim, stim_time = OptoStimProtocol().get_stimulus(pos_key)
+        stim_time = stim_time[stim == 1]
+        delays = np.subtract.outer(stim_time, stim_time)
+        delays = delays[np.tril_indices_from(delays, k=0)]
+        delays = delays[delays < histogram_bins[-1]]
+        vals, bins = np.histogram(delays, bins=histogram_bins)
+        vals = vals + 1e-9
+        vals = smooth(vals, int(0.015 / np.mean(np.diff(histogram_bins))))
+        bins = bins[:-1] + np.diff(bins) / 2
+        vals = vals / vals.sum()
+        stim_results.append(vals)
+
     results = [np.array(r) for r in results]
+    stim_results = np.array(stim_results)
 
     ## plot the results
     fig, ax = plt.subplots(
@@ -142,43 +154,48 @@ def autocorrelegram(
     )  # sharex=True,sharey=True)
     ind = np.argsort(counts)
     period = dataset_key["period_ms"] if "period_ms" in dataset_key else 0
-    periods = [125, period]
+    periods = [125, period, period]
     periodicity_results = []
-    for i, (color, label) in enumerate(
-        zip(["cornflowerblue", "firebrick"], ["control", "test"])
+    for i, (color, label, data) in enumerate(
+        zip(
+            ["cornflowerblue", "firebrick", "purple"],
+            ["control", "test", "stim"],
+            [*results, stim_results],
+        )
     ):
-        ax[i].imshow(
-            np.log10(results[i][ind, 1:]),
-            aspect="auto",
-            origin="lower",
-            extent=[bins[0], bins[-1], 0, len(results[i])],
-            clim=[-2.5, -2],
-            interpolation="none",
-        )
-        ax[i].imshow(
-            results[i][ind,],
-            aspect="auto",
-            origin="lower",
-            extent=[bins[0], bins[-1], 0, len(results[i])],
-            clim=[0.001, 0.004],
-            #  cmap='bone_r'
-        )
-        # ax[i].imshow(results[i][1:],aspect='auto',origin='lower',
-        #              extent=[bins[0],bins[-1],0,len(results[i])],
-        #             #  clim=[-3,-2],
-        #              )
+        if i < 2:
+            ax[i].imshow(
+                np.log10(results[i][ind, 1:]),
+                aspect="auto",
+                origin="lower",
+                extent=[bins[0], bins[-1], 0, len(results[i])],
+                clim=[-2.5, -2],
+                interpolation="none",
+            )
+            ax[i].imshow(
+                results[i][ind,],
+                aspect="auto",
+                origin="lower",
+                extent=[bins[0], bins[-1], 0, len(results[i])],
+                clim=[0.001, 0.004],
+                #  cmap='bone_r'
+            )
+            # ax[i].imshow(results[i][1:],aspect='auto',origin='lower',
+            #              extent=[bins[0],bins[-1],0,len(results[i])],
+            #             #  clim=[-3,-2],
+            #              )
         marks = [
             periods[i] / 1000 * n
             for n in range(1, 10)
             if periods[i] / 1000 * n < bins[-1]
         ]
-        ax[i].vlines(marks, 0, len(results[i]), color="w", ls=":")
+        ax[i].vlines(marks, 0, len(data), color="w", ls=":")
 
-        ax[2].plot(bins, np.median(results[i].T, axis=1), color=color)
+        ax[2].plot(bins, np.median(data.T, axis=1), color=color)
         ax[2].fill_between(
             bins,
-            np.quantile(results[i].T, 0.25, axis=1),
-            np.quantile(results[i].T, 0.75, axis=1),
+            np.quantile(data.T, 0.25, axis=1),
+            np.quantile(data.T, 0.75, axis=1),
             alpha=0.3,
             facecolor=color,
         )
@@ -189,23 +206,22 @@ def autocorrelegram(
                 if periods[i] / 1000 * n < bins[-1]
             ]
         )
+        if i >= 2:
+            continue
         if periods[i] < 99:
-            ax[2].vlines(
-                marks[::2], 0, len(results[i]), ls="--", color=color, alpha=0.4
-            )
-            ax[2].vlines(
-                marks[1::2], 0, len(results[i]), ls=":", color=color, alpha=0.2
-            )
+            ax[2].vlines(marks[::2], 0, len(data), ls="--", color=color, alpha=0.4)
+            ax[2].vlines(marks[1::2], 0, len(data), ls=":", color=color, alpha=0.2)
         else:
-            ax[2].vlines(marks, 0, len(results[i]), ls="--", color=color, alpha=0.4)
+            ax[2].vlines(marks, 0, len(data), ls="--", color=color, alpha=0.4)
 
         # get the autocorrellegram periodicity timescale
         width = 0.02
         periodicity = [
-            estimate_periodicity_timescale(np.log10(x), bins, width=width)
-            for x in results[i]
+            estimate_periodicity_timescale(np.log10(x), bins, width=width) for x in data
         ]
         periodicity = np.array(periodicity)
+        if periodicity.size == 0:
+            continue
         periodicity = periodicity[~np.isnan(periodicity)]
         periodicity_results.append(periodicity)
         violin = ax[3].violinplot(
@@ -227,7 +243,7 @@ def autocorrelegram(
         ax[3].scatter([i], [periodicity], color="k", alpha=1)
 
     # label and clean up axes
-    y = np.median(results[i].T, axis=1)
+    y = np.median(results[1].T, axis=1)
     ax[2].set_ylim(y.min() * 0.3, y.max())
     ax[2].set_yscale("log")
 

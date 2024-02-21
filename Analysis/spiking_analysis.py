@@ -67,11 +67,21 @@ from Analysis.circular_shuffle import (
 
 
 from spiking_analysis_tables import BinnedSpiking
-from spyglass.spikesorting import CuratedSpikeSorting
+from spyglass.spikesorting.v0 import CuratedSpikeSorting
+from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
 import scipy.signal
 
 
-##################################################################################3
+##################################################################################
+def bin_spikes_around_marks(spikes, marks, bins):
+    delays = np.subtract.outer(spikes, marks)
+    delays = delays[delays < bins[-1]]
+    delays = delays[delays >= bins[0]]
+    vals, _ = np.histogram(delays, bins=bins)
+    vals = vals + 1e-9
+    return vals
+
+
 def opto_spiking_dynamics(
     dataset_key: dict,
     plot_rng: np.ndarray = np.arange(-0.08, 0.2, 0.002),
@@ -100,15 +110,16 @@ def opto_spiking_dynamics(
         ).fetch1("interval_list_name")
         basic_key = {
             "nwb_file_name": nwb_file_name,
-            "sort_interval_name": interval_name,
+            "sorted_spikes_group_name": interval_name,
         }
         print(basic_key)
-        # get BinnedSpiking keys for this interval
-        key_list = (BinnedSpiking & basic_key).get_current_curation_key_list()
-        # check if spiking data exists
-        if len(key_list) == 0:
-            print("no spiking data for", basic_key)
+        # get spike times for this interval
+        if not SortedSpikesGroup() & basic_key:
+            print("no compiled spiking data for", basic_key)
             continue
+        sorted_group_key = (SortedSpikesGroup() & basic_key).fetch1("KEY")
+        spikes = SortedSpikesGroup().fetch_spike_data(sorted_group_key)
+
         pos_interval_name = convert_epoch_interval_name_to_position_interval_name(
             {"nwb_file_name": nwb_file_name, "interval_list_name": interval_name}
         )
@@ -116,6 +127,8 @@ def opto_spiking_dynamics(
             "nwb_file_name": nwb_file_name,
             "interval_list_name": pos_interval_name,
         }
+
+        # Define what marks we're alligning to
         if marks == "first_pulse":
             pulse_timepoints = (
                 OptoStimProtocol() & opto_key
@@ -176,41 +189,65 @@ def opto_spiking_dynamics(
                 "marks must be in [first_pulse, all_pulses, theta_peaks, dummy_cycle]"
             )
 
+        interval_restrict = np.array(
+            [[tp + plot_rng[0], tp + plot_rng[-1]] for tp in pulse_timepoints]
+        )
         period = (OptoStimProtocol() & opto_key).fetch1("period_ms")
-        # get time-binned spike counts
-        for bin_key in key_list:
-            spikes_group = (BinnedSpiking() & bin_key).mark_alligned_binned_spikes(
-                bin_key, marks=pulse_timepoints, rng=[plot_rng[0], plot_rng[-1]]
-            )
-            if not (spikes_group is None or spikes_group.shape[0] == 0):
-                spike_counts.append(spikes_group.sum(axis=0))
+        if "period_ms" in dataset_key:
+            shuffle_window = dataset_key["period_ms"] / 1000.0
+        else:
+            shuffle_window = 0.125
+        n_shuffles = 10
+        interval_restrict_shuffle = np.array(
+            [
+                [tp + plot_rng[0] - shuffle_window, tp + plot_rng[-1] + shuffle_window]
+                for tp in pulse_timepoints
+            ]
+        )
 
-                # shuffle the spike counts
-                alligned_binned_spike_func = generate_alligned_binned_spike_func(
-                    bin_key, [plot_rng[0], plot_rng[-1]]
+        # get histogram spike counts
+        for unit_spikes in spikes:
+            unit_spikes_restricted = interval_list_contains(
+                interval_restrict, unit_spikes
+            )
+            vals = bin_spikes_around_marks(
+                unit_spikes_restricted, pulse_timepoints, plot_rng
+            )
+            spike_counts.append(vals)
+            # if gauss_smooth:
+            #     vals = smooth(
+            #         vals, int(gauss_smooth / np.mean(np.diff(histogram_bins)))
+            #     )
+            # break
+            unit_spikes_restricted = interval_list_contains(
+                interval_restrict_shuffle, unit_spikes
+            )
+
+            def alligned_binned_spike_func(marks):
+                return np.array(
+                    [
+                        bin_spikes_around_marks(unit_spikes_restricted, m, plot_rng)
+                        for m in marks
+                    ]
+                )[None, :, :]
+
+            spike_counts_shuffled.extend(
+                shuffled_spiking_distribution(
+                    marks=pulse_timepoints,
+                    alligned_binned_spike_func=alligned_binned_spike_func,
+                    n_shuffles=n_shuffles,
+                    shuffle_window=shuffle_window,
                 )
-                if "period_ms" in dataset_key:
-                    shuffle_window = dataset_key["period_ms"] / 1000.0
-                else:
-                    shuffle_window = 0.125
-                n_shuffles = 100
-                spike_counts_shuffled.extend(
-                    shuffled_spiking_distribution(
-                        marks=pulse_timepoints,
-                        alligned_binned_spike_func=alligned_binned_spike_func,
-                        n_shuffles=n_shuffles,
-                        shuffle_window=shuffle_window,
-                    )
-                )
-                # if len(spike_counts) > 3:
-                #     break
-                # # break  # TODO: remove this break
+            )
 
     if len(spike_counts) == 0 or len(pulse_timepoints) == 0:
         if return_data:
             return None, [], [], []
         return
-    spike_counts = np.concatenate(spike_counts, axis=0)  # shape = (units,bins)
+    spike_counts = np.array(spike_counts)  # shape = (units,bins)
+    spike_counts_shuffled = np.array(
+        spike_counts_shuffled
+    )  # shape = (units, marks, bins)
     # spike_counts_shuffled = np.concatenate(
     #     spike_counts_shuffled, axis=0
     # )  # shape = (units, marks, bins)
