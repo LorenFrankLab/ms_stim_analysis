@@ -281,7 +281,9 @@ def get_control_test_power_spectrum(
 
     ref_electrode, lfp_s_key = get_ref_electrode_index(lfp_s_key)
 
-    lfp_eseries = (LFPOutput).fetch_nwb(restriction=lfp_s_key)[0]["lfp"]
+    lfp_eseries = (LFPV1 & lfp_s_key).fetch_nwb()[0][
+        "lfp"
+    ]  # (LFPOutput()).fetch_nwb(restriction=lfp_s_key)[0]["lfp"]
     lfp_elect_indeces = get_electrode_indices(lfp_eseries, [ref_electrode])
     if lfp_elect_indeces[0] > 1000:
         return (
@@ -1350,7 +1352,7 @@ def lfp_per_pulse_analysis(
         # get lfp band phase for reference electrode
         ref_elect, basic_key = get_ref_electrode_index(basic_key)  #
         # ref_elect = (Electrode() & basic_key).fetch("original_reference_electrode")[0]
-        lfp_eseries = (LFPOutput).fetch_nwb(restriction=basic_key)[0]["lfp"]
+        lfp_eseries = (LFPOutput & basic_key).fetch_nwb(restriction=basic_key)[0]["lfp"]
         ref_index = get_electrode_indices(lfp_eseries, [ref_elect])
 
         # get LFP series
@@ -2293,7 +2295,7 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         # get lfp data
         ref_elect, basic_key = get_ref_electrode_index(basic_key)  #
         # ref_elect = (Electrode() & basic_key).fetch("original_reference_electrode")[0]
-        lfp_eseries = (LFPOutput).fetch_nwb(restriction=basic_key)[0]["lfp"]
+        lfp_eseries = (LFPOutput & basic_key).fetch_nwb(restriction=basic_key)[0]["lfp"]
         ref_index = get_electrode_indices(lfp_eseries, [ref_elect])
 
         # get LFP series
@@ -2353,6 +2355,8 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
             spectrograms.append(C[:, padding:-padding])
 
     if len(spectrograms) == 0:
+        if return_data:
+            return fig, [], []
         return fig
     tp = np.arange(lfp_trace_window[0], lfp_trace_window[1]) / fs
     # plot
@@ -2384,6 +2388,7 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         central = 1000.0 / dataset_key["period_ms"]
         track_freq.append((central - 0.5, central + 0.5))
 
+    return_traces = []
     for i, f in enumerate(track_freq):
         ind_freq = np.where((freq >= f[0]) & (freq <= f[1]))[0]
         c = plt.cm.Set1(i / len(track_freq))
@@ -2402,6 +2407,7 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
             alpha=0.1,
             facecolor=c,
         )
+        return_traces.append(power_traces)
 
     ax[1].legend()
     ax[1].set_xlabel("time (s)")
@@ -2411,5 +2417,5 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
     ax[0].plot(tp, peak_freq, color="limegreen", ls="dashdot", lw=2.5)
 
     if return_data:
-        return fig, spectrograms
+        return fig, spectrograms, return_traces
     return fig
