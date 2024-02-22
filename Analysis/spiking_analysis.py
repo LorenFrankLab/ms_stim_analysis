@@ -34,8 +34,9 @@ from spyglass.common import (
 )
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.position.v1 import TrodesPosV1
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from .position_analysis import get_running_intervals, filter_position_ports
-from .utils import convert_delta_marks_to_timestamp_values
+from .utils import convert_delta_marks_to_timestamp_values, smooth
 
 from Time_and_trials.ms_interval import EpochIntervalListName
 
@@ -65,6 +66,7 @@ from Analysis.circular_shuffle import (
     stacked_marks_to_kl,
 )
 
+from Analysis.spiking_place_fields import decoding_place_fields
 
 from spiking_analysis_tables import BinnedSpiking
 from spyglass.spikesorting.v0 import CuratedSpikeSorting
@@ -447,6 +449,449 @@ def opto_spiking_dynamics(
     plt.rcParams["svg.fonttype"] = "none"
 
     print(num_sig, len(unit_sig_modulated))
+    if return_data:
+        return fig, spike_counts, tp, KL
+    return fig
+
+
+###################################################################
+# Place Field + Opto Stimulation
+def opto_spiking_dynamics_place_dependence(
+    dataset_key: dict,
+    plot_rng: np.ndarray = np.arange(-0.08, 0.2, 0.002),
+    marks="first_pulse",
+    return_data: bool = False,
+    place_field_ranges: list = [
+        [0, 5],
+        [10, 99999],
+    ],  # distance from place field center in cm
+):
+    # get the filtered data
+    dataset = filter_opto_data(dataset_key)
+    n_place = len(place_field_ranges)
+
+    # compile the data
+    spike_counts_list = [[] for _ in range(n_place)]
+    spike_counts_shuffled_list = [[] for _ in range(n_place)]
+    for nwb_file_name, position_interval_name in tqdm(
+        zip(dataset.fetch("nwb_file_name")[:3], dataset.fetch("interval_list_name")[:3])
+    ):
+        interval_name = (
+            (
+                PositionIntervalMap()
+                & {
+                    "nwb_file_name": nwb_file_name,
+                    "position_interval_name": position_interval_name,
+                }
+            )
+            * TaskEpoch()
+        ).fetch1("interval_list_name")
+        basic_key = {
+            "nwb_file_name": nwb_file_name,
+            "sorted_spikes_group_name": interval_name,
+        }
+        print(basic_key)
+
+        # get place field data
+        if not SortedSpikesDecodingV1() & basic_key:
+            print("no place field data for", basic_key)
+            continue
+        place_key = {
+            "nwb_file_name": nwb_file_name,
+            "interval_list_name": position_interval_name,
+        }
+        place_fields, place_bins = decoding_place_fields(
+            dataset_key=place_key,
+            return_place_fields=True,
+            plot=False,
+            return_correlations=False,
+            filter_specificity=False,
+            min_rate=0,
+            return_place_field_centers=True,
+        )
+        place_bins = np.array(place_bins)
+        # define the position of the center of each place field
+        place_field_centers = place_bins[np.argmax(place_fields[1], axis=1)]
+
+        # get position info for this interval
+        decode_key = (
+            SortedSpikesDecodingV1()
+            & basic_key
+            & {"encoding_interval": position_interval_name + "_opto_test_interval"}
+        ).fetch1("KEY")
+        pos_df = SortedSpikesDecodingV1().fetch_linear_position_info(decode_key)
+
+        # get spike times for this interval
+        # if not SortedSpikesGroup() & basic_key:
+        #     print("no compiled spiking data for", basic_key)
+        #     continue
+        # sorted_group_key = (SortedSpikesGroup() & basic_key).fetch1("KEY")
+        # spikes = SortedSpikesGroup().fetch_spike_data(sorted_group_key)
+        spikes = SortedSpikesDecodingV1().fetch_spike_data(decode_key)
+
+        pos_interval_name = convert_epoch_interval_name_to_position_interval_name(
+            {"nwb_file_name": nwb_file_name, "interval_list_name": interval_name}
+        )
+        opto_key = {
+            "nwb_file_name": nwb_file_name,
+            "interval_list_name": pos_interval_name,
+        }
+
+        # Define what marks we're alligning to
+        if marks == "first_pulse":
+            pulse_timepoints = (
+                OptoStimProtocol() & opto_key
+            ).get_cylcle_begin_timepoints(opto_key)
+        elif marks == "all_pulses":
+            stim, time = (OptoStimProtocol() & opto_key).get_stimulus(opto_key)
+            pulse_timepoints = time[stim == 1]
+        elif marks == "odd_pulses":
+            # get times of firt pulse in cylce
+            t_mark_cycle = OptoStimProtocol().get_cylcle_begin_timepoints(opto_key)
+            # get times of all stimulus
+            stim, t_mark = OptoStimProtocol().get_stimulus(opto_key)
+            t_mark = t_mark[stim == 1]
+            # label each pulse as its count in the cycle
+            pulse_count = np.zeros_like(t_mark)
+            mark_ind_cycle = [np.where(t_mark == t_)[0][0] for t_ in t_mark_cycle]
+            pulse_count[mark_ind_cycle] = 1
+            count = 1
+            for i in range(pulse_count.size):
+                if pulse_count[i] == 1:
+                    count = 1
+                pulse_count[i] = count
+                count += 1
+            pulse_count = pulse_count - 1  # 0 index the count
+            pulse_timepoints = t_mark[pulse_count % 2 == 1]
+
+        elif marks == "theta_peaks":
+            # get all running theta peaks
+            band_key = {
+                "nwb_file_name": nwb_file_name,
+                "target_interval_list_name": interval_name,
+            }
+            pulse_timepoints = get_theta_peaks(band_key)
+            # subset to peaks within 1second of a cycle start
+            cycle_start = (OptoStimProtocol() & opto_key).get_cylcle_begin_timepoints(
+                opto_key
+            )
+            cycle_start_intervals = []
+            for t in cycle_start:
+                cycle_start_intervals.append([t, t + 1])
+            pulse_timepoints = interval_list_contains(
+                cycle_start_intervals, pulse_timepoints
+            )
+        elif "dummy_cycle" in marks:
+            dummy_freq = int(marks.split("=")[-1])
+            cycle_start = (OptoStimProtocol() & opto_key).get_cylcle_begin_timepoints(
+                opto_key
+            )
+            pulse_timepoints = []
+            for t in cycle_start:
+                pulse_timepoints.append(t)
+                for dummy_count in range(10):
+                    pulse_timepoints.append(t + dummy_count * 1 / dummy_freq)
+            pulse_timepoints = np.asarray(pulse_timepoints)
+
+        else:
+            raise ValueError(
+                "marks must be in [first_pulse, all_pulses, theta_peaks, dummy_cycle]"
+            )
+
+        # get position info of pulse_timepoints
+        pos_ind = np.digitize(pulse_timepoints, pos_df.index.values)
+        pulse_pos = pos_df.linear_position.iloc[pos_ind].values
+        # general restriction on spike times considered
+        interval_restrict = np.array(
+            [[tp + plot_rng[0], tp + plot_rng[-1]] for tp in pulse_timepoints]
+        )
+        period = (OptoStimProtocol() & opto_key).fetch1("period_ms")
+        if "period_ms" in dataset_key:
+            shuffle_window = dataset_key["period_ms"] / 1000.0
+        else:
+            shuffle_window = 0.125
+        n_shuffles = 10
+        interval_restrict_shuffle = np.array(
+            [
+                [tp + plot_rng[0] - shuffle_window, tp + plot_rng[-1] + shuffle_window]
+                for tp in pulse_timepoints
+            ]
+        )
+        for n_pos, pos_range in enumerate(place_field_ranges):
+            # get histogram spike counts
+            for n_spike, unit_spikes in enumerate(spikes[:]):
+                # define what pulses happen in the right position relative to unit's place field
+                center_loc = place_field_centers[n_spike]
+                pulse_distance = np.abs(pulse_pos - center_loc)
+                pulse_ind = np.where(
+                    (pulse_distance > pos_range[0]) & (pulse_distance < pos_range[1])
+                )[0]
+                if len(pulse_ind) == 0:
+                    spike_counts_list[n_pos].append(np.ones(plot_rng.size-1)*np.nan)
+                    spike_counts_shuffled_list[n_pos].extend(np.ones((1, 10, plot_rng.size-1))*np.nan)
+                    continue
+
+                unit_spikes_restricted = interval_list_contains(
+                    interval_restrict, unit_spikes
+                )
+                vals = bin_spikes_around_marks(
+                    unit_spikes_restricted, pulse_timepoints[pulse_ind], plot_rng
+                )
+                spike_counts_list[n_pos].append(vals)
+                # if gauss_smooth:
+                #     vals = smooth(
+                #         vals, int(gauss_smooth / np.mean(np.diff(histogram_bins)))
+                #     )
+                # break
+                unit_spikes_restricted = interval_list_contains(
+                    interval_restrict_shuffle, unit_spikes
+                )
+
+                def alligned_binned_spike_func(marks):
+                    return np.array(
+                        [
+                            bin_spikes_around_marks(unit_spikes_restricted, m, plot_rng)
+                            for m in marks
+                        ]
+                    )[None, :, :]
+
+                spike_counts_shuffled_list[n_pos].extend(
+                    shuffled_spiking_distribution(
+                        marks=pulse_timepoints[pulse_ind],
+                        alligned_binned_spike_func=alligned_binned_spike_func,
+                        n_shuffles=n_shuffles,
+                        shuffle_window=shuffle_window,
+                    )
+                )
+        # break
+
+    # if len(spike_counts_list) == 0 or len(pulse_timepoints) == 0:
+    #     if return_data:
+    #         return None, [], [], []
+    #     return
+    spike_counts_list = [
+        np.array(x) for x in spike_counts_list
+    ]  # list[shape = (units,bins)]
+    spike_counts_shuffled_list = [
+        np.array(x) for x in spike_counts_shuffled_list
+    ]  # list[shape = (units, marks, bins)]
+
+    """""" ""
+    # make figure
+    fig = plt.figure(figsize=(18, 5 * len(place_field_ranges)))
+    gs = gridspec.GridSpec(len(place_field_ranges), 16)
+    ax_list = [
+        [
+            fig.add_subplot(gs[i, :5]),
+            fig.add_subplot(gs[i, 6:11]),
+            fig.add_subplot(gs[i, 11]),
+            fig.add_subplot(gs[i, 13:14]),
+            fig.add_subplot(gs[i, 14:16]),
+        ]
+        for i in range(len(place_field_ranges))
+    ]
+
+    ind = None
+    peak_order = None
+    for i in range(len(place_field_ranges)):
+        ax = ax_list[i]
+        spike_counts = spike_counts_list[i]
+        spike_counts_shuffled = spike_counts_shuffled_list[i]
+        track_range = place_field_ranges[i]
+        if spike_counts.size == 0:
+            continue
+
+        if ind is None:
+            ind = spike_counts.sum(axis=1) > 1e1
+        spike_counts = spike_counts[ind]
+        spike_counts_shuffled = np.array(spike_counts_shuffled)[ind]
+        # print("opto", opto_key)
+        # print("key_list", key_list)
+
+        if len(spike_counts) == 0:
+            if return_data:
+                return None, [], [], []
+            return
+
+        # calculate KL divergence
+        KL = [
+            discrete_KL_divergence(s, q="uniform", laplace_smooth=True)
+            for s in spike_counts
+        ]
+
+        # calculate the bootstrap statistics of the null distribution for the
+        # measurement on each unit
+        unit_measurement_null_dist_mean = []
+        unit_measurement_null_dist_rng = []
+        unit_sig_modulated = []
+        for i in range(spike_counts_shuffled.shape[0]):
+            x, rng = bootstrap(
+                spike_counts_shuffled[i],
+                measurement=stacked_marks_to_kl,
+                n_samples=int(spike_counts_shuffled[i].shape[0] / n_shuffles),
+                n_boot=1000,
+            )
+            unit_measurement_null_dist_mean.append(x)
+            unit_measurement_null_dist_rng.append(rng)
+            # print(x, rng, KL[i])
+            if KL[i] > rng[1]:
+                unit_sig_modulated.append(True)
+            else:
+                unit_sig_modulated.append(False)
+
+        # fig, ax = plt.subplots(ncols=3, figsize=(15, 5))
+        # plot traces
+
+        tp = np.linspace(plot_rng[0], plot_rng[-1], spike_counts.shape[1]) * 1000
+        plot_spikes = (spike_counts[:].T).copy()
+        mua = np.sum(plot_spikes, axis=1)
+        plot_spikes = plot_spikes / plot_spikes[:].mean(axis=0)
+        mua = mua / mua[:].mean()
+        plot_spikes = smooth(plot_spikes, 5)
+        mua = smooth(mua[:, None], 5)
+
+        ax[0].plot(
+            tp,
+            np.log10(plot_spikes),
+            alpha=min(5.0 / plot_spikes.shape[1], 0.4),
+            c="cornflowerblue",
+        )
+        ax[0].plot(
+            tp,
+            np.log10(np.nanmean((plot_spikes), axis=1)),
+            c="cornflowerblue",
+            linewidth=3,
+            label="multi unit activity",
+        )
+
+        if marks == "first_pulse" or period == -1:
+            ax[0].fill_between(
+                [0, 0 + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.3
+            )
+        elif marks in ["all_pulses", "odd_pulses"] and period is not None:
+            if period is not None:
+                t = 0
+                while t < tp.max():
+                    ax[0].fill_between(
+                        [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
+                    )
+                    t += period
+                t = -period
+                while t + 40 > tp.min():
+                    ax[0].fill_between(
+                        [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
+                    )
+                    t -= period
+
+        ax[0].set_ylim(-1, 1)
+        ax[0].set_xlim(tp[0], tp[-1])
+        ax[0].set_xlabel("time (ms)")
+        ax[0].set_ylabel("log10 Normalized firing rate ")
+        ax[0].spines[["top", "right"]].set_visible(False)
+        ax[0].legend()
+        # ax[0].set_title(dataset)
+
+        # plot heatmap of normalized firing rate
+        if peak_order is None:
+            ind_peak = np.arange(
+                tp.size // 2,tp.size
+            )  # np.where((tp > -10) & (tp < period))[0]
+            peak_time = np.argmin(plot_spikes[ind_peak], axis=0)
+            peak_order = np.argsort(peak_time)
+            sig_unit = [i for i in peak_order if unit_sig_modulated[i]]
+            not_sig_unit = [i for i in peak_order if not unit_sig_modulated[i]]
+            peak_order = sig_unit + not_sig_unit
+
+        ax[1].matshow(
+            np.log10(plot_spikes[:, peak_order].T),
+            cmap="RdBu_r",
+            origin="lower",
+            clim=(-0.5, 0.5),
+            extent=(tp[0], tp[-1], 0, plot_spikes.shape[1]),
+            aspect="auto",
+        )
+
+        num_sig = np.sum(unit_sig_modulated)
+        ax[1].fill_between(
+            [tp[0], tp[-1]],
+            [num_sig, num_sig],
+            [plot_spikes.shape[1], plot_spikes.shape[1]],
+            facecolor="grey",
+            alpha=0.1,
+        )
+        ax[1].fill_between(
+            [tp[0], tp[-1]],
+            [num_sig, num_sig],
+            [plot_spikes.shape[1], plot_spikes.shape[1]],
+            facecolor="none",
+            alpha=0.7,
+            hatch="/",
+            edgecolor="grey",
+        )
+
+        ax[1].plot(
+            [
+                0,
+                0,
+            ],
+            [0, plot_spikes.shape[1]],
+            ls="--",
+            c="k",
+            lw=2,
+        )
+        ax[1].plot(
+            [
+                40,
+                40,
+            ],
+            [0, plot_spikes.shape[1]],
+            ls="--",
+            c="k",
+            lw=2,
+        )
+
+        # violinplot of kl divergence across units
+        ax[3].violinplot(
+            KL,
+            showmeans=False,
+            showmedians=False,
+            showextrema=False,
+        )
+        ax[3].scatter([1], [np.nanmean(KL)], c="k", s=50)
+        ax[3].set_ylabel("KL divergence")
+        ax[3].set_xticks([])
+        ax[3].spines[["top", "right", "bottom"]].set_visible(False)
+
+        # Table with information about the dataset
+        the_table = ax[4].table(
+            cellText=[[len(dataset)], [marks]]
+            + [[str(x)] for x in dataset_key.values()],
+            rowLabels=["number_epochs", "marks"] + [str(x) for x in dataset_key.keys()],
+            loc="right",
+            colWidths=[0.6, 0.6],
+        )
+        ax[4].spines[["top", "right", "left", "bottom"]].set_visible(False)
+        ax[4].set_xticks([])
+        ax[4].set_yticks([])
+        ax[0].set_title(f"Distance from place field center: {track_range} cm")
+
+        # colorbar
+        # ax[] = fig.add_subplot(gs[:,-1])
+        plt.colorbar(
+            cm.ScalarMappable(mpl.colors.Normalize(-0.5, 0.5), cmap="RdBu_r"),
+            cax=ax[2],
+            label="log10 Normalized firing rate",
+        )
+
+        ax[1].set_xlabel("time (ms)")
+        ax[1].set_ylabel("Unit #")
+        ax[1].set_xlim(tp[0], tp[-1])
+        ax[2].set_ylabel("log 10 normalized firing rate")
+
+        fig.canvas.draw()
+        plt.rcParams["svg.fonttype"] = "none"
+
+        print(num_sig, len(unit_sig_modulated))
     if return_data:
         return fig, spike_counts, tp, KL
     return fig
@@ -841,45 +1286,6 @@ def get_spikecount_per_time_bin(spike_times, time):
         np.digitize(spike_times, time[1:-1]),
         minlength=time.shape[0],
     )
-
-
-def gkern(l: int = 5, sig: float = 1.0):
-    """
-    creates gaussian kernel with side length `l` and a sigma of `sig`
-    """
-    ax = np.linspace(-(l - 1) / 2.0, (l - 1) / 2.0, l)
-    gauss = np.exp(-0.5 * np.square(ax) / np.square(sig))
-    return gauss / np.sum(gauss)
-    kernel = np.outer(gauss, gauss)
-    return kernel / np.sum(kernel)
-
-
-def smooth(data, n=5, sigma=None):
-    """smooths data with gaussian kernel of size n"""
-    if n % 2 == 0:
-        n += 1  # make sure n is odd
-    if sigma is None:
-        sigma = n / 2
-    kernel = gkern(n, sigma)[:, None]
-    if len(data.shape) == 1:
-        pad = np.ones(((n - 1) // 2, 1))
-        return np.squeeze(
-            scipy.signal.convolve2d(
-                np.concatenate(
-                    [pad * data[:, None][0], data[:, None], pad * data[:, None][-1]],
-                    axis=0,
-                ),
-                kernel,
-                mode="valid",
-            )
-        )
-    else:
-        pad = np.ones(((n - 1) // 2, data.shape[1]))
-        return scipy.signal.convolve2d(
-            np.concatenate([pad * data[0], data, pad * data[-1]], axis=0),
-            kernel,
-            mode="valid",
-        )
 
 
 def spatial_information_rate(spike_counts, occupancy):
