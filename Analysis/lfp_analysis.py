@@ -37,6 +37,7 @@ from spyglass.lfp.v1 import (
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.lfp.analysis.v1 import LFPBandV1
+from spyglass.lfp.v1 import LFPArtifactDetection
 
 from .position_analysis import get_running_intervals, filter_position_ports
 from .utils import convert_delta_marks_to_timestamp_values
@@ -299,8 +300,7 @@ def get_control_test_power_spectrum(
     # filter out high amplitude noise
     non_noise_intervals = np.array(
         noise_free_lfp_intervals(
-            lfp_timestamps[lfp_time_ind],
-            lfp_eseries.data[lfp_time_ind][:, lfp_elect_indeces][:, 0],
+            lfp_s_key,
         )
     )
     if len(optogenetic_run_interval) == 0 or len(control_run_interval) == 0:
@@ -513,8 +513,7 @@ def get_control_test_power_spectrum_full_probe(
     # filter out high amplitude noise
     non_noise_intervals = np.array(
         noise_free_lfp_intervals(
-            lfp_timestamps[lfp_time_ind],
-            lfp_eseries.data[lfp_time_ind][:, lfp_elect_indeces][:, 0],
+            lfp_s_key,
         )
     )
     if len(optogenetic_run_interval) == 0 or len(control_run_interval) == 0:
@@ -1090,8 +1089,32 @@ def opto_spectrum_analysis_full_probe(
     return fig
 
 
-def noise_free_lfp_intervals(time: list, lfp: list, threshold=LFP_AMP_CUTOFF) -> list:
+def noise_free_lfp_intervals(lfp_key: dict) -> list:
     """finds intervals where the lfp is below a threshold value. Use for filtering high-amplitude noise
+
+    Parameters
+    ----------
+    lfp_key : dict
+        selection key for the lfp artifact detection table
+
+    Returns
+    -------
+    list
+        intervals where amplitude artifacts are not detected
+    """
+    if not isinstance(lfp_key, dict):
+        raise ValueError(
+            "noise_free_lfp_intervals now uses the LFPArtifactDetection class, and requires a dictionary input",
+            "Please update your code to use the new method signature",
+        )
+    return (LFPArtifactDetection & lfp_key).fetch1("artifact_removed_valid_times")
+
+
+def noise_free_lfp_intervals_NO_TABLE(
+    time: list, lfp: list, threshold=LFP_AMP_CUTOFF
+) -> list:
+    """finds intervals where the lfp is below a threshold value. Use for filtering high-amplitude noise
+    This function is not used in the current pipeline, but is kept for reference
     Parameters
     ----------
     time : list
