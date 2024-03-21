@@ -465,6 +465,7 @@ def opto_spiking_dynamics_place_dependence(
         [0, 5],
         [10, 99999],
     ],  # distance from place field center in cm
+    normalize_rates: bool = True,
 ):
     # get the filtered data
     dataset = filter_opto_data(dataset_key)
@@ -473,8 +474,9 @@ def opto_spiking_dynamics_place_dependence(
     # compile the data
     spike_counts_list = [[] for _ in range(n_place)]
     spike_counts_shuffled_list = [[] for _ in range(n_place)]
+    marks_counts_list = [[] for _ in range(n_place)]
     for nwb_file_name, position_interval_name in tqdm(
-        zip(dataset.fetch("nwb_file_name")[:3], dataset.fetch("interval_list_name")[:3])
+        zip(dataset.fetch("nwb_file_name")[:1], dataset.fetch("interval_list_name")[:1])
     ):
         interval_name = (
             (
@@ -627,8 +629,11 @@ def opto_spiking_dynamics_place_dependence(
                     (pulse_distance > pos_range[0]) & (pulse_distance < pos_range[1])
                 )[0]
                 if len(pulse_ind) == 0:
-                    spike_counts_list[n_pos].append(np.ones(plot_rng.size-1)*np.nan)
-                    spike_counts_shuffled_list[n_pos].extend(np.ones((1, 10, plot_rng.size-1))*np.nan)
+                    spike_counts_list[n_pos].append(np.ones(plot_rng.size - 1) * np.nan)
+                    spike_counts_shuffled_list[n_pos].extend(
+                        np.ones((1, 10, plot_rng.size - 1)) * np.nan
+                    )
+                    marks_counts_list[n_pos].append(len(pulse_ind))
                     continue
 
                 unit_spikes_restricted = interval_list_contains(
@@ -637,7 +642,8 @@ def opto_spiking_dynamics_place_dependence(
                 vals = bin_spikes_around_marks(
                     unit_spikes_restricted, pulse_timepoints[pulse_ind], plot_rng
                 )
-                spike_counts_list[n_pos].append(vals)
+                spike_counts_list[n_pos].append(vals)  # / float(len(pulse_ind)))
+                marks_counts_list[n_pos].append(float(len(pulse_ind)))
                 # if gauss_smooth:
                 #     vals = smooth(
                 #         vals, int(gauss_smooth / np.mean(np.diff(histogram_bins)))
@@ -675,6 +681,9 @@ def opto_spiking_dynamics_place_dependence(
     spike_counts_shuffled_list = [
         np.array(x) for x in spike_counts_shuffled_list
     ]  # list[shape = (units, marks, bins)]
+    marks_counts_list = [
+        np.array(x) for x in marks_counts_list
+    ]  # list[shape = (units)]
 
     """""" ""
     # make figure
@@ -693,18 +702,22 @@ def opto_spiking_dynamics_place_dependence(
 
     ind = None
     peak_order = None
+    mua_rng = None
     for i in range(len(place_field_ranges)):
         ax = ax_list[i]
         spike_counts = spike_counts_list[i]
         spike_counts_shuffled = spike_counts_shuffled_list[i]
         track_range = place_field_ranges[i]
+        mark_counts = marks_counts_list[i]
         if spike_counts.size == 0:
             continue
 
         if ind is None:
             ind = spike_counts.sum(axis=1) > 1e1
+            # ind = np.ones(spike_counts.shape[0], dtype=bool)
         spike_counts = spike_counts[ind]
         spike_counts_shuffled = np.array(spike_counts_shuffled)[ind]
+        mark_counts = mark_counts[ind]
         # print("opto", opto_key)
         # print("key_list", key_list)
 
@@ -743,58 +756,96 @@ def opto_spiking_dynamics_place_dependence(
         # plot traces
 
         tp = np.linspace(plot_rng[0], plot_rng[-1], spike_counts.shape[1]) * 1000
-        plot_spikes = (spike_counts[:].T).copy()
-        mua = np.sum(plot_spikes, axis=1)
-        plot_spikes = plot_spikes / plot_spikes[:].mean(axis=0)
-        mua = mua / mua[:].mean()
+        plot_spikes = (spike_counts[:].T).copy() / mark_counts
+        mua = np.sum(plot_spikes / mark_counts, axis=1)
+        if normalize_rates:
+            plot_spikes = plot_spikes / plot_spikes[:].mean(axis=0)
+            mua = mua / mua[:].mean()
+        else:
+            plot_spikes = plot_spikes - plot_spikes[:].mean(axis=0)  # /mark_counts
+            mua = mua - mua[:].mean()
         plot_spikes = smooth(plot_spikes, 5)
         mua = smooth(mua[:, None], 5)
 
+        if normalize_rates:
+            plot_traces = np.log10(plot_spikes)
+            mua_traces = np.log10(np.nanmean((plot_spikes), axis=1))
+        else:
+            plot_traces = plot_spikes / np.mean(np.diff(tp)) * 1000  # /mark_counts
+            mua_traces = np.nansum((plot_spikes), axis=1)
+            mua_traces = (
+                (mua_traces - np.mean(mua_traces)) / np.mean(np.diff(tp)) * 1000
+            )
         ax[0].plot(
             tp,
-            np.log10(plot_spikes),
+            plot_traces,
             alpha=min(5.0 / plot_spikes.shape[1], 0.4),
             c="cornflowerblue",
         )
-        ax[0].plot(
+        mua_ax = ax[0].twinx()
+        c_mua = "darkolivegreen"
+        mua_ax.plot(
             tp,
-            np.log10(np.nanmean((plot_spikes), axis=1)),
-            c="cornflowerblue",
+            mua_traces,
+            c=c_mua,
             linewidth=3,
             label="multi unit activity",
         )
+        mua_ax.set_ylabel("$\Delta$ MUA firing rate (Hz)", color=c_mua)
+        if mua_rng is None:
+            mua_scale = np.nanmax(np.abs(mua_traces)) * 1.1
+            mua_rng = (-mua_scale, mua_scale)
+        mua_ax.set_ylim(*mua_rng)
 
+        fill_rng = 100
         if marks == "first_pulse" or period == -1:
             ax[0].fill_between(
-                [0, 0 + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.3
+                [0, 0 + 40],
+                [-fill_rng, -fill_rng],
+                [fill_rng, fill_rng],
+                facecolor="thistle",
+                alpha=0.3,
             )
         elif marks in ["all_pulses", "odd_pulses"] and period is not None:
             if period is not None:
                 t = 0
                 while t < tp.max():
                     ax[0].fill_between(
-                        [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
+                        [t, t + 40],
+                        [-fill_rng, -fill_rng],
+                        [fill_rng, fill_rng],
+                        facecolor="thistle",
+                        alpha=0.5,
                     )
                     t += period
                 t = -period
                 while t + 40 > tp.min():
                     ax[0].fill_between(
-                        [t, t + 40], [-1, -1], [1, 1], facecolor="thistle", alpha=0.5
+                        [t, t + 40],
+                        [-fill_rng, -fill_rng],
+                        [fill_rng, fill_rng],
+                        facecolor="thistle",
+                        alpha=0.5,
                     )
                     t -= period
 
-        ax[0].set_ylim(-1, 1)
+        if normalize_rates:
+            ax[0].set_ylabel("log10 Normalized firing rate ")
+            clim = (-1, 1)
+        else:
+            ax[0].set_ylabel("$\Delta$ firing rate (Hz)")
+            clim = (-40, 40)
+        ax[0].spines[["top", "right"]].set_visible(False)
+        ax[0].set_ylim(*clim)
         ax[0].set_xlim(tp[0], tp[-1])
         ax[0].set_xlabel("time (ms)")
-        ax[0].set_ylabel("log10 Normalized firing rate ")
-        ax[0].spines[["top", "right"]].set_visible(False)
         ax[0].legend()
         # ax[0].set_title(dataset)
 
         # plot heatmap of normalized firing rate
         if peak_order is None:
             ind_peak = np.arange(
-                tp.size // 2,tp.size
+                tp.size // 2, tp.size
             )  # np.where((tp > -10) & (tp < period))[0]
             peak_time = np.argmin(plot_spikes[ind_peak], axis=0)
             peak_order = np.argsort(peak_time)
@@ -802,32 +853,59 @@ def opto_spiking_dynamics_place_dependence(
             not_sig_unit = [i for i in peak_order if not unit_sig_modulated[i]]
             peak_order = sig_unit + not_sig_unit
 
+        if normalize_rates:
+            plot_matrix = np.log10(plot_spikes[:, peak_order].T)
+            clim = (-0.5, 0.5)
+        else:
+            plot_matrix = plot_spikes[:, peak_order].T / np.mean(np.diff(tp)) * 1000
+            clim = (-20, 20)
         ax[1].matshow(
-            np.log10(plot_spikes[:, peak_order].T),
+            # np.log10(plot_spikes[:, peak_order].T),
+            plot_matrix,
             cmap="RdBu_r",
             origin="lower",
-            clim=(-0.5, 0.5),
+            clim=clim,
             extent=(tp[0], tp[-1], 0, plot_spikes.shape[1]),
             aspect="auto",
         )
 
+        # num_sig = np.sum(unit_sig_modulated)
+        # ax[1].fill_between(
+        #     [tp[0], tp[-1]],
+        #     [num_sig, num_sig],
+        #     [plot_spikes.shape[1], plot_spikes.shape[1]],
+        #     facecolor="grey",
+        #     alpha=0.1,
+        # )
+        # ax[1].fill_between(
+        #     [tp[0], tp[-1]],
+        #     [num_sig, num_sig],
+        #     [plot_spikes.shape[1], plot_spikes.shape[1]],
+        #     facecolor="none",
+        #     alpha=0.7,
+        #     hatch="/",
+        #     edgecolor="grey",
+        # )
         num_sig = np.sum(unit_sig_modulated)
-        ax[1].fill_between(
-            [tp[0], tp[-1]],
-            [num_sig, num_sig],
-            [plot_spikes.shape[1], plot_spikes.shape[1]],
-            facecolor="grey",
-            alpha=0.1,
-        )
-        ax[1].fill_between(
-            [tp[0], tp[-1]],
-            [num_sig, num_sig],
-            [plot_spikes.shape[1], plot_spikes.shape[1]],
-            facecolor="none",
-            alpha=0.7,
-            hatch="/",
-            edgecolor="grey",
-        )
+        for i_sig, sig in enumerate(np.array(unit_sig_modulated)[np.array(peak_order)]):
+            if sig:
+                continue
+            ax[1].fill_between(
+                [tp[0], tp[-1]],
+                [i_sig, i_sig],
+                [i_sig + 1, i_sig + 1],
+                facecolor="grey",
+                alpha=0.1,
+            )
+            ax[1].fill_between(
+                [tp[0], tp[-1]],
+                [i_sig, i_sig],
+                [i_sig + 1, i_sig + 1],
+                facecolor="none",
+                alpha=0.7,
+                hatch="/",
+                # edgecolor="grey",
+            )
 
         ax[1].plot(
             [
@@ -878,7 +956,7 @@ def opto_spiking_dynamics_place_dependence(
         # colorbar
         # ax[] = fig.add_subplot(gs[:,-1])
         plt.colorbar(
-            cm.ScalarMappable(mpl.colors.Normalize(-0.5, 0.5), cmap="RdBu_r"),
+            cm.ScalarMappable(mpl.colors.Normalize(*clim), cmap="RdBu_r"),
             cax=ax[2],
             label="log10 Normalized firing rate",
         )
@@ -886,7 +964,10 @@ def opto_spiking_dynamics_place_dependence(
         ax[1].set_xlabel("time (ms)")
         ax[1].set_ylabel("Unit #")
         ax[1].set_xlim(tp[0], tp[-1])
-        ax[2].set_ylabel("log 10 normalized firing rate")
+        if normalize_rates:
+            ax[2].set_ylabel("log 10 normalized firing rate")
+        else:
+            ax[2].set_ylabel("$\Delta$ firing rate")
 
         fig.canvas.draw()
         plt.rcParams["svg.fonttype"] = "none"
