@@ -2,6 +2,7 @@ import numpy as np
 from spyglass.common import TaskEpoch, IntervalList
 from Utils.point_process_helpers import event_times_in_intervals_bool
 
+
 def nwbf_session_id_to_file_name(nwbf):
     # Turn nwb file session_id into nwb file name
     # Assumes session_id has form: ratname_date, and nwb file name has form: ratnamedate_.nwb
@@ -25,6 +26,16 @@ def check_nwb_file_in_session_table(nwb_file_name):
 def nwbf_name_from_subject_id_date(subject_id,
                                    date):
     return f"{subject_id}{date}_.nwb"
+
+
+def subject_id_date_from_nwbf_name(nwb_file_name):
+
+    len_date = 8
+    subject_id_date = nwb_file_name.split("_.nwb")[0]
+    subject_id = subject_id_date[:-len_date]
+    date = subject_id_date[-len_date:]
+
+    return subject_id, date
 
 
 def get_epoch_valid_times(nwb_file_name, epoch):
