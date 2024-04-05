@@ -154,19 +154,54 @@ def wtrack_position_filter(key: dict) -> list:
     list
         list of time intervals when rat is not at the ports of the w-track
     """
+    # get the position data
+    if not "pos_merge_id" in key:
+        merge_id = (
+            (PositionOutput.TrodesPosV1 & key)
+            & "trodes_pos_params_name LIKE '%upsampled'"
+        ).fetch1("merge_id")
+        key["pos_merge_id"] = merge_id
+    # get the linearized position data
+    lin_key = (LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_wtrack%'").fetch1("KEY")
     df_ = (
-        (TrodesPosV1() & key) & "trodes_pos_params_name LIKE '%upsampled'"
+        LinearizedPositionV1() & lin_key
     ).fetch1_dataframe()
-    wtrack_limit = np.nanmin(np.asarray(df_["position_y"])) + 25
-    print("wtrack_limit", wtrack_limit)
-    valid_pos = (np.asarray(df_["position_y"]) > wtrack_limit).astype(int)
+    x = np.asarray(df_["linear_position"])
+    
+    # get the infp about the ports
+    from spyglass.linearization.v1 import TrackGraph
+    graph = (TrackGraph()& lin_key).get_networkx_track_graph()
+    port_nodes = [0,3,5] # port nodes we want to exclude
+    exclude_right = [True,False,False] # whether the aea to exclude is to the left or right of the port
+    node_positions = (TrackGraph()& lin_key).fetch1('node_positions')[port_nodes]
+    edge_order = (TrackGraph()& lin_key).fetch1('linear_edge_order')
+    edge_spacing = (TrackGraph()& lin_key).fetch1('linear_edge_spacing')
+
+    from track_linearization import get_linearized_position
+    port_positions = get_linearized_position(node_positions,
+                            graph,
+                            edge_order=edge_order,
+                            edge_spacing = edge_spacing).linear_position.values
+    # define the linear position to exclude approaching the ports
+    exclude_size = 10
+    exclude_zone = [[x,x+exclude_size] if exclude_right[i] else [x-exclude_size,x] for i,x in enumerate(port_positions)]
+    
+    # indexes to include
+    valid_pos= np.ones(x.size,).astype(bool)
+    for exclude in exclude_zone:
+        valid_pos = valid_pos & ((x<exclude[0]) | (x>exclude[1]))
+    valid_pos = valid_pos.astype(int)
     valid_pos = np.append(
         [0],
         valid_pos,
     )
+    assert valid_pos.sum()
     interval_st = df_.index[np.where(np.diff(valid_pos) == 1)[0]]
     interval_end = df_.index[np.where(np.diff(valid_pos) == -1)[0]]
-    return [[st, en] for st, en in zip(interval_st, interval_end)]
+    valid_intervals = [[st, en] for st, en in zip(interval_st, interval_end)]
+    for interval in valid_intervals:
+        assert interval[0] < interval[1]
+    return valid_intervals
 
 
 def filter_position_ports(key: dict) -> list:
