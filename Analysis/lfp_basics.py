@@ -29,11 +29,7 @@ from spyglass.common import (
     get_electrode_indices,
 )
 from spyglass.common.common_interval import interval_list_intersect
-from spyglass.lfp.v1 import (
-    LFPElectrodeGroup,
-    LFPSelection,
-    LFPV1,
-)
+from spyglass.lfp.v1 import LFPElectrodeGroup, LFPSelection, LFPV1, LFPArtifactDetection
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.lfp.analysis.v1 import LFPBandV1
@@ -60,6 +56,7 @@ from Analysis.utils import (
     filter_opto_data,
 )
 from Analysis.lfp_analysis import get_ref_electrode_index
+from Style.style_guide import animal_style, transfection_style
 
 LFP_AMP_CUTOFF = 2000
 
@@ -75,9 +72,16 @@ def individual_lfp_traces(
 ):
     # Define the dataset (epochs included in this analyusis)
     dataset = filter_opto_data(dataset_key)
-
     nwb_file_name_list = dataset.fetch("nwb_file_name")
     interval_list_name_list = dataset.fetch("interval_list_name")
+    # get the color for display
+    if "animal" in dataset_key:
+        color = animal_style.loc[dataset_key["animal"]]["color"]
+    elif "transfected" in dataset_key:
+        if dataset_key["transfected"]:
+            color = transfection_style["transfected"]
+        else:
+            color = transfection_style["control"]
     # get the lfp traces for every relevant pulse
     lfp_traces = []
     marks = []
@@ -101,7 +105,7 @@ def individual_lfp_traces(
         # get lfp band phase for reference electrode
         ref_elect, basic_key = get_ref_electrode_index(basic_key)  #
         # ref_elect = (Electrode() & basic_key).fetch("original_reference_electrode")[0]
-        lfp_eseries = (LFPOutput).fetch_nwb(restriction=basic_key)[0]["lfp"]
+        lfp_eseries = LFPOutput().fetch_nwb(restriction=basic_key)[0]["lfp"]
         ref_index = get_electrode_indices(lfp_eseries, [ref_elect])
 
         # get LFP series
@@ -113,6 +117,15 @@ def individual_lfp_traces(
         ind = np.sort(np.unique(lfp_timestamps, return_index=True)[1])
         lfp_timestamps = lfp_timestamps[ind]
         lfp_ = lfp_[ind]
+        # nan out artifact intervals
+        artifact_times = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
+        for artifact in artifact_times:
+            lfp_[
+                np.logical_and(
+                    lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
+                )
+            ] = np.nan
+
         try:
             assert np.all(np.diff(lfp_timestamps) > 0)
         except:
