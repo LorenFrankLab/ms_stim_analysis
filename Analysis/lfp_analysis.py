@@ -68,6 +68,7 @@ from Analysis.circular_shuffle import (
     bootstrap,
     trace_median,
 )
+from Style.style_guide import interval_style
 
 
 LFP_AMP_CUTOFF = 2000
@@ -790,12 +791,12 @@ def opto_spectrum_analysis(
             for i in range(control_power_spectrum.shape[1])
         ]
     )
-    c = "cornflowerblue"
+    c = interval_style["control"]
     ax[0].plot(f, control_stats[:, 0], c=c, label="stim protocol OFF")
     ax[0].fill_between(
         f, control_stats[:, 1], control_stats[:, 2], alpha=0.4, facecolor=c
     )
-    c = "firebrick"
+    c = interval_style["test"]
     ax[0].plot(f, opto_stats[:, 0], c=c, label="stim protocol ON")
     ax[0].fill_between(f, opto_stats[:, 1], opto_stats[:, 2], alpha=0.4, facecolor=c)
     ax[0].set_xlim(0, 35)
@@ -1382,13 +1383,16 @@ def lfp_per_pulse_analysis(
         lfp_df = (LFPV1() & basic_key).fetch1_dataframe()
         lfp_timestamps = lfp_df.index
         lfp_ = np.array(lfp_df[ref_index])
-        # while not np.all(np.diff(lfp_timestamps) > 0):
-        #     ind = np.where(np.diff(lfp_timestamps) > 0)[0] + 1
-        #     print(ind.size - ind.sum())
-        #     # print(lfp_timestamps.size)
-        #     # print(np.where(np.diff(lfp_timestamps)<0)[0])
-        #     lfp_timestamps = lfp_timestamps[ind]
-        #     lfp_ = lfp_[ind]
+        # nan out artifact intervals
+        artifact_times = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
+        for artifact in artifact_times:
+            lfp_[
+                np.logical_and(
+                    lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
+                )
+            ] = np.nan
+        
+
         ind = np.sort(np.unique(lfp_timestamps, return_index=True)[1])
         lfp_timestamps = lfp_timestamps[ind]
         lfp_ = lfp_[ind]
@@ -1558,7 +1562,7 @@ def lfp_per_pulse_analysis(
             np.squeeze(lo[loc]) - loc,
             np.squeeze(hi[loc]) - loc,
             facecolor=color,
-            alpha=0.05,
+            alpha=0.2,
         )
         if circular_shuffle:
             ref, ref_rng = bootstrap(
