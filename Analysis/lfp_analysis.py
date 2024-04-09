@@ -33,6 +33,7 @@ from spyglass.lfp.v1 import (
     LFPElectrodeGroup,
     LFPSelection,
     LFPV1,
+    LFPArtifactDetection,
 )
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.lfp_merge import LFPOutput
@@ -1391,7 +1392,6 @@ def lfp_per_pulse_analysis(
                     lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
                 )
             ] = np.nan
-        
 
         ind = np.sort(np.unique(lfp_timestamps, return_index=True)[1])
         lfp_timestamps = lfp_timestamps[ind]
@@ -2327,7 +2327,16 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         # get LFP series
         lfp_df = (LFPV1() & basic_key).fetch1_dataframe()
         lfp_timestamps = lfp_df.index
-        lfp_ = np.array(lfp_df[ref_index])
+        lfp_ = np.array(lfp_df[ref_index]).astype(float)
+        # nan out segments with large noise
+        artifacts = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
+        for artifact in artifacts:
+            lfp_[
+                np.logical_and(
+                    lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
+                )
+            ] = np.nan
+
         fs = (LFPV1() & basic_key).fetch1("lfp_sampling_rate")
         padding = int(1 / np.min(frequencies) * fs)
 
