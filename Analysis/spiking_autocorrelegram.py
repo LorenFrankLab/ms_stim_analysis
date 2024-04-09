@@ -1,17 +1,18 @@
 from spyglass.common import convert_epoch_interval_name_to_position_interval_name
-from spyglass.spikesorting import CuratedSpikeSorting
+from spyglass.spikesorting.v0 import CuratedSpikeSorting
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from spyglass.common import interval_list_contains, PositionIntervalMap, TaskEpoch
-
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 import os
 
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
 from ms_opto_stim_protocol import OptoStimProtocol
 from Analysis.spiking_analysis import smooth
-from Analysis.position_analysis import get_running_intervals
+
 from Analysis.utils import filter_opto_data, get_running_valid_intervals
+from Style.style_guide import interval_style
 
 
 def autocorrelegram(
@@ -47,8 +48,10 @@ def autocorrelegram(
         interval_name = (
             (
                 PositionIntervalMap()
-                & {"nwb_file_name": nwb_file_name}
-                & {"position_interval_name": pos_interval}
+                & {
+                    "nwb_file_name": nwb_file_name,
+                    "position_interval_name": pos_interval,
+                }
             )
             * TaskEpoch
         ).fetch1(
@@ -69,25 +72,16 @@ def autocorrelegram(
             "test_intervals", "control_intervals"
         )
         # get the spike and position dat for each
-        spike_df = []
-        for sort_group in set(
-            (CuratedSpikeSorting() & basic_key).fetch("sort_group_id")
-        ):
-            key = {"sort_group_id": sort_group}
-            cur_id = np.max(
-                (CuratedSpikeSorting() & basic_key & key).fetch("curation_id")
-            )
-            key["curation_id"] = cur_id
-            cur_id = 1
-
-            tetrode_df = (CuratedSpikeSorting & basic_key & key).fetch_nwb()[0]
-            if "units" in tetrode_df:
-                tetrode_df = tetrode_df["units"]
-                tetrode_df = tetrode_df[tetrode_df.label == ""]
-                spike_df.append(tetrode_df)
-        if len(spike_df) == 0:
+        decode_key = {
+            "nwb_file_name": nwb_file_name,
+            "encoding_interval": pos_interval,
+        }
+        if not SortedSpikesDecodingV1 & decode_key:
             continue
-        spike_df = pd.concat(spike_df)
+        decode_key = (SortedSpikesDecodingV1 & decode_key).fetch1("KEY")
+        spike_df = SortedSpikesDecodingV1().fetch_spike_data(
+            decode_key, filter_by_interval=False
+        )
 
         run_intervals = get_running_valid_intervals(
             pos_key, seperate_optogenetics=False, filter_speed=filter_speed
@@ -98,7 +92,7 @@ def autocorrelegram(
             if interval[1] - interval[0] > min_run_time
         ]
         histogram_bins = np.arange(0, 0.5, 0.001)
-        for spikes in spike_df.spike_times.values:
+        for spikes in spike_df:
             spikes = interval_list_contains(
                 run_intervals,
                 spikes,
@@ -125,7 +119,8 @@ def autocorrelegram(
                 delays = delays[delays < histogram_bins[-1]]
                 vals, bins = np.histogram(delays, bins=histogram_bins)
                 vals = vals + 1e-9
-                vals = smooth(vals, int(0.015 / np.mean(np.diff(histogram_bins))))
+                sigma = int(0.015 / np.mean(np.diff(histogram_bins)))
+                vals = smooth(vals, 3 * sigma, sigma)
                 bins = bins[:-1] + np.diff(bins) / 2
                 vals = vals / vals.sum()
                 results[i].append(vals)
@@ -143,7 +138,7 @@ def autocorrelegram(
         stim_results.append(vals)
 
     results = [np.array(r) for r in results]
-    stim_results = np.array(stim_results)
+    stim_results = np.array(stim_results) * np.nan
 
     ## plot the results
     fig, ax = plt.subplots(
@@ -158,7 +153,7 @@ def autocorrelegram(
     periodicity_results = []
     for i, (color, label, data) in enumerate(
         zip(
-            ["cornflowerblue", "firebrick", "purple"],
+            [interval_style["control"], interval_style["test"], "purple"],
             ["control", "test", "stim"],
             [*results, stim_results],
         )
