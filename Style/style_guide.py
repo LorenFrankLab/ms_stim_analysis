@@ -3,20 +3,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 animal_style = [
-    {"name": "Winnie", "color": "darkorange", "alias": "Rat 1"},
-    {"name": "Frodo", "color": "goldenrod", "alias": "Rat 2"},
-    {"name": "Totoro", "color": "sandybrown", "alias": "Rat 3"},
-    {"name": "Banner", "color": "coral", "alias": "Rat 4"},
+    {"name": "Winnie", "color": "darkorange", "alias": "Rat V"},
+    {"name": "Frodo", "color": "goldenrod", "alias": "Rat F"},
+    {"name": "Totoro", "color": "sandybrown", "alias": "Rat T"},
+    {"name": "Banner", "color": "coral", "alias": "Rat B"},
     # controls
-    {"name": "Wallie", "color": "slategrey", "alias": "Rat 5"},
-    {"name": "Olive", "color": "steelblue", "alias": "Rat 6"},
-    {"name": "Yoshi", "color": "cadetblue", "alias": "Rat 7"},
-    {"name": "Bilbo", "color": "mediumslateblue", "alias": "Rat 8"},
+    {"name": "Wallie", "color": "slategrey", "alias": "Rat W"},
+    {"name": "Olive", "color": "lightsteelblue", "alias": "Rat L"},
+    {"name": "Yoshi", "color": "silver", "alias": "Rat Y"},
+    {"name": "Bilbo", "color": "darkgrey", "alias": "Rat I"},
 ]
 animal_style = pd.DataFrame(animal_style)
 animal_style.set_index("name", inplace=True)
 
-interval_style = {"test": "fuchsia", "control": "g"}
+interval_style = {"test": "#DA70D6", "control": "#7BC8F6"}  # C875C4",
 
 transfection_style = {"transfected": "indianred", "control": "grey"}
 
@@ -43,6 +43,7 @@ def style_sample():
         np.random.normal(i + 1, 0.3, x.size),
         color=transfection_style["control"],
         label="control",
+        lw=2,
     )
 
     ax[0].set_title("Animals")
@@ -58,6 +59,7 @@ def style_sample():
             np.random.normal(i, 0.3, x.size),
             color=interval_style[interval],
             label=interval,
+            lw=2,
         )
     ax[1].set_title("Optogenetic intervals")
     ax[1].set_yticks(np.arange(i + 1), interval_style.keys())
