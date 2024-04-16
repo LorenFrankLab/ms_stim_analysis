@@ -87,7 +87,7 @@ def get_running_intervals(
     return run_intervals
 
 
-def lineartrack_position_filter(key: dict) -> list:
+def lineartrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
     """get list of interval times when rat is NOT at the ends of the linear track
     # 12.12.23: switch to using linearized position instead of x position
 
@@ -95,6 +95,8 @@ def lineartrack_position_filter(key: dict) -> list:
     ----------
     key : dict
         key for TrodesPosV1
+    buffer : float, optional
+        buffer zone around the ends of the linear track, by default 10
 
     Returns
     -------
@@ -124,7 +126,7 @@ def lineartrack_position_filter(key: dict) -> list:
     distance = (
         (TrackGraph() & track_key).get_networkx_track_graph().edges[[0, 1]]["distance"]
     )
-    linear_limits = [10, distance - 10]
+    linear_limits = [buffer, distance - buffer]
 
     # filter
     print("linear_limits", linear_limits)
@@ -141,13 +143,15 @@ def lineartrack_position_filter(key: dict) -> list:
     return valid_intervals
 
 
-def wtrack_position_filter(key: dict) -> list:
+def wtrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
     """get list of interval times when rat is NOT at the ports of the w-track
 
     Parameters
     ----------
     key : dict
         key for TrodesPosV1
+    buffer : float, optional
+        buffer zone around the ports, by default 10
 
     Returns
     -------
@@ -162,34 +166,44 @@ def wtrack_position_filter(key: dict) -> list:
         ).fetch1("merge_id")
         key["pos_merge_id"] = merge_id
     # get the linearized position data
-    lin_key = (LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_wtrack%'").fetch1("KEY")
-    df_ = (
-        LinearizedPositionV1() & lin_key
-    ).fetch1_dataframe()
+    lin_key = (
+        LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_wtrack%'"
+    ).fetch1("KEY")
+    df_ = (LinearizedPositionV1() & lin_key).fetch1_dataframe()
     x = np.asarray(df_["linear_position"])
-    
+
     # get the infp about the ports
     from spyglass.linearization.v1 import TrackGraph
-    graph = (TrackGraph()& lin_key).get_networkx_track_graph()
-    port_nodes = [0,3,5] # port nodes we want to exclude
-    exclude_right = [True,False,False] # whether the aea to exclude is to the left or right of the port
-    node_positions = (TrackGraph()& lin_key).fetch1('node_positions')[port_nodes]
-    edge_order = (TrackGraph()& lin_key).fetch1('linear_edge_order')
-    edge_spacing = (TrackGraph()& lin_key).fetch1('linear_edge_spacing')
+
+    graph = (TrackGraph() & lin_key).get_networkx_track_graph()
+    port_nodes = [0, 3, 5]  # port nodes we want to exclude
+    exclude_right = [
+        True,
+        False,
+        False,
+    ]  # whether the aea to exclude is to the left or right of the port
+    node_positions = (TrackGraph() & lin_key).fetch1("node_positions")[port_nodes]
+    edge_order = (TrackGraph() & lin_key).fetch1("linear_edge_order")
+    edge_spacing = (TrackGraph() & lin_key).fetch1("linear_edge_spacing")
 
     from track_linearization import get_linearized_position
-    port_positions = get_linearized_position(node_positions,
-                            graph,
-                            edge_order=edge_order,
-                            edge_spacing = edge_spacing).linear_position.values
+
+    port_positions = get_linearized_position(
+        node_positions, graph, edge_order=edge_order, edge_spacing=edge_spacing
+    ).linear_position.values
     # define the linear position to exclude approaching the ports
-    exclude_size = 10
-    exclude_zone = [[x,x+exclude_size] if exclude_right[i] else [x-exclude_size,x] for i,x in enumerate(port_positions)]
-    
+
+    exclude_zone = [
+        [x, x + buffer] if exclude_right[i] else [x - buffer, x]
+        for i, x in enumerate(port_positions)
+    ]
+
     # indexes to include
-    valid_pos= np.ones(x.size,).astype(bool)
+    valid_pos = np.ones(
+        x.size,
+    ).astype(bool)
     for exclude in exclude_zone:
-        valid_pos = valid_pos & ((x<exclude[0]) | (x>exclude[1]))
+        valid_pos = valid_pos & ((x < exclude[0]) | (x > exclude[1]))
     valid_pos = valid_pos.astype(int)
     valid_pos = np.append(
         [0],
@@ -204,7 +218,7 @@ def wtrack_position_filter(key: dict) -> list:
     return valid_intervals
 
 
-def filter_position_ports(key: dict) -> list:
+def filter_position_ports(key: dict, **kwargs) -> list:
     """filter position data to exclude times when rat is at the ports
 
     Parameters
@@ -219,8 +233,8 @@ def filter_position_ports(key: dict) -> list:
     """
     task = ((TaskIdentification * EpochIntervalListName) & key).fetch1("contingency")
     if task in ["lineartrack", "Lineartrack"]:
-        return lineartrack_position_filter(key)
+        return lineartrack_position_filter(key, **kwargs)
     if task in ["wtrack", "w-track", "Wtrack", "W-track", "W-Track"]:
-        return wtrack_position_filter(key)
+        return wtrack_position_filter(key, **kwargs)
     print(f"task {task} not recognized")
     return None
