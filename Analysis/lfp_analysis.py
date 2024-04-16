@@ -2266,6 +2266,7 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
     frequencies=np.arange(1, 20, 1),
     wavelet="morl",
     return_data=False,
+    marks: str = "first_pulse",
 ):
     """Generates a figure characterizing the lfp around each stimulus cycle
 
@@ -2287,6 +2288,10 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         color to plot this dataset, by default "cornflowerblue"
     return_data : bool, optional
         whether to return the lfp traces amplitudes and phases, by default False
+    marks : str, optional
+        How to define t0 allignment. Options are "first_pulse" (default, allignment to the first pulse in the cycle),
+        "position_test" (allignment to exit of the reward port during the opto test interval),
+        "position_control" (allignment to exit of the reward port during the opto control interval)
 
     Returns
     -------
@@ -2344,7 +2349,33 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         scale = pywt.frequency2scale(wavelet, frequencies / fs)
 
         # get analytic band power
-        t0_list = OptoStimProtocol().get_cylcle_begin_timepoints(stim_key)
+        if marks == "first_pulse":
+            t0_list = OptoStimProtocol().get_cylcle_begin_timepoints(stim_key)
+        elif marks in ["position_test", "position_control"]:
+            # get t0 from filtered port interval
+            valid_intervals = np.array(filter_position_ports(stim_key, buffer=20))
+            if marks == "position_test":
+                restrict_intervals = (OptoStimProtocol & stim_key).fetch1(
+                    "test_intervals"
+                )
+            else:
+                restrict_intervals = (OptoStimProtocol & stim_key).fetch1(
+                    "control_intervals"
+                )
+            valid_intervals = interval_list_intersect(
+                valid_intervals, np.array(restrict_intervals)
+            )
+            valid_intervals = [
+                interval
+                for interval in valid_intervals
+                if interval[1] - interval[0] > 0.5
+            ]
+            t0_list = [interval[0] for interval in valid_intervals]
+        else:
+            raise ValueError(
+                "marks must be 'first_pulse', 'position_test' or 'position_control'"
+            )
+
         for t0 in tqdm(t0_list):
             ind = np.digitize(t0, lfp_timestamps)
             # skip if can't fill window
