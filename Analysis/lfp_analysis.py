@@ -2333,14 +2333,15 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         lfp_df = (LFPV1() & basic_key).fetch1_dataframe()
         lfp_timestamps = lfp_df.index
         lfp_ = np.array(lfp_df[ref_index]).astype(float)
+        assert all(np.isfinite(lfp_))
         # nan out segments with large noise
-        artifacts = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
-        for artifact in artifacts:
-            lfp_[
-                np.logical_and(
-                    lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
-                )
-            ] = np.nan
+        # artifacts = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
+        # for artifact in artifacts:
+        #     lfp_[
+        #         np.logical_and(
+        #             lfp_timestamps > artifact[0], lfp_timestamps < artifact[1]
+        #         )
+        #     ] = np.nan
 
         fs = (LFPV1() & basic_key).fetch1("lfp_sampling_rate")
         padding = int(1 / np.min(frequencies) * fs)
