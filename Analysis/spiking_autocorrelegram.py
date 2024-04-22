@@ -3,7 +3,13 @@ from spyglass.spikesorting.v0 import CuratedSpikeSorting
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from spyglass.common import interval_list_contains, PositionIntervalMap, TaskEpoch
+from spyglass.common import (
+    interval_list_contains,
+    interval_list_intersect,
+    interval_list_contains_ind,
+    PositionIntervalMap,
+    TaskEpoch,
+)
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 import os
 
@@ -21,6 +27,7 @@ def autocorrelegram(
     min_spikes: int = 300,
     min_run_time: float = 0.5,
     return_periodicity_results: bool = False,
+    return_auto_corr: bool = False,
 ):
     """Function that calculates autocorrelegrams and periodicity of sorted units under optogenetic stimulation
 
@@ -30,11 +37,13 @@ def autocorrelegram(
         min_spikes (int, optional): minimum number of spikes to include a unit. Defaults to 300.
         min_run_time (float, optional): minimum time rat must be running to include interval for analysis, seconds. Defaults to 0.5.
         return_periodicity_results (bool, optional): whether to periodicity results, used in plot_periodicity_dependence(). Defaults to False.
-
+        return_auto_corr (bool, optional): whether to return the autocorrelegrams. Used for development. Defaults to False.
     Returns:
        fig: subplot figure of results
         periodicity_results (optional): list of periodicity outputs from autocorrelegram()
     """
+    histogram_bins = np.arange(-0.5, 0.5, 0.002)
+
     # get the matching epochs
     dataset = filter_opto_data(dataset_key)
     nwb_file_names = dataset.fetch("nwb_file_name")
@@ -91,7 +100,7 @@ def autocorrelegram(
             for interval in run_intervals
             if interval[1] - interval[0] > min_run_time
         ]
-        histogram_bins = np.arange(0, 0.5, 0.001)
+
         for spikes in spike_df:
             spikes = interval_list_contains(
                 run_intervals,
@@ -107,6 +116,19 @@ def autocorrelegram(
                 ]
             ):
                 x = interval_list_contains(interval, spikes)
+                bins = histogram_bins[:-1]
+                absolute_bin_times = np.add.outer(x, bins).ravel()
+                absolute_bin_index = np.array(
+                    [np.arange(bins.size) for _ in range(x.size)]
+                ).ravel()
+                valid_interval = interval_list_intersect(
+                    np.array(interval), np.array(run_intervals)
+                )
+                valid_bin_index = absolute_bin_index[
+                    interval_list_contains_ind(valid_interval, absolute_bin_times)
+                ]
+                valid_bin_count = np.bincount(valid_bin_index, minlength=bins.size)
+
                 # if x.size<300:
                 #     results[i].append(np.zeros_like(histogram_bins[:-1]))
                 #     if i==1:
@@ -115,10 +137,18 @@ def autocorrelegram(
                 if i == 1:
                     counts.append(x.size)
                 delays = np.subtract.outer(x, x)
-                delays = delays[np.tril_indices_from(delays, k=0)]
-                delays = delays[delays < histogram_bins[-1]]
+                # delays = delays[np.tril_indices_from(delays, k=0)]
+                delays = np.ravel(delays)
+                # delays = delays[delays != 0]
+                delays = delays[
+                    np.logical_and(
+                        delays < histogram_bins[-1], delays > histogram_bins[0]
+                    )
+                ]
+                # delays = delays[np.abs(delays) > 0]
                 vals, bins = np.histogram(delays, bins=histogram_bins)
                 vals = vals + 1e-9
+                vals = vals / valid_bin_count
                 sigma = int(0.015 / np.mean(np.diff(histogram_bins)))
                 vals = smooth(vals, 3 * sigma, sigma)
                 bins = bins[:-1] + np.diff(bins) / 2
@@ -134,7 +164,7 @@ def autocorrelegram(
         vals = vals + 1e-9
         vals = smooth(vals, int(0.015 / np.mean(np.diff(histogram_bins))))
         bins = bins[:-1] + np.diff(bins) / 2
-        vals = vals / vals.sum()
+        # vals = vals / vals.sum()
         stim_results.append(vals)
 
     results = [np.array(r) for r in results]
@@ -143,9 +173,9 @@ def autocorrelegram(
     ## plot the results
     fig, ax = plt.subplots(
         1,
-        5,
-        figsize=(20, 4),
-        width_ratios=[1, 1, 2, 1, 0.5],
+        6,
+        figsize=(25, 4),
+        width_ratios=[1, 1, 2, 1, 1, 0.5],
     )  # sharex=True,sharey=True)
     ind = np.argsort(counts)
     period = dataset_key["period_ms"] if "period_ms" in dataset_key else 0
@@ -237,10 +267,23 @@ def autocorrelegram(
         )
         ax[3].scatter([i], [periodicity], color="k", alpha=1)
 
+    # get the rhythmicity score for test and control
+    rhythmicity_score = [rhythmicity(data, tau=bins * 1000) for data in results[:2]]
+    delta_rhythmicity = (
+        rhythmicity_score[1] - rhythmicity_score[0]
+    ) / rhythmicity_score[0]
+    ax[4].violinplot(
+        delta_rhythmicity, positions=[0], showmeans=False, showextrema=False
+    )
+    ax[4].set_ylabel("Rhythmicity (test-control)/control")
+    ax[4].set_xticks([])
+    # periodicity_results.append(rhythmicity_score)
+    periodicity_results.append(delta_rhythmicity)
+
     # label and clean up axes
     y = np.median(results[1].T, axis=1)
-    ax[2].set_ylim(y.min() * 0.3, y.max())
-    ax[2].set_yscale("log")
+    ax[2].set_ylim(y.min() * 0.3, y.max() * 1.1)
+    # ax[2].set_yscale("log")
 
     ax[1].set_yticks([])
     ax[0].set_title("Optogenetic Control")
@@ -255,19 +298,21 @@ def autocorrelegram(
     ax[3].set_ylabel("Periodicity (s)")
 
     # table of experiment information
-    the_table = ax[4].table(
+    the_table = ax[-1].table(
         cellText=[[len(dataset)]] + [[str(x)] for x in dataset_key.values()],
         rowLabels=["number_epochs"] + [str(x) for x in dataset_key.keys()],
         loc="right",
         colWidths=[0.6, 0.6],
     )
-    ax[4].spines[["top", "right", "left", "bottom"]].set_visible(False)
-    ax[4].set_xticks([])
-    ax[4].set_yticks([])
+    ax[-1].spines[["top", "right", "left", "bottom"]].set_visible(False)
+    ax[-1].set_xticks([])
+    ax[-1].set_yticks([])
 
     plt.rcParams["svg.fonttype"] = "none"
     fig.suptitle(f"{dataset_key['animal']}: {period}ms opto stim")
     if return_periodicity_results:
+        if return_auto_corr:
+            return fig, periodicity_results, results
         return fig, periodicity_results
     return fig
 
@@ -382,3 +427,50 @@ def plot_periodicity_dependence(periodicities, driving_periods):
     ax[1].set_ylabel("Periodicity - Reference Frequency")
     ax[1].set_xlabel("Stimulation Period (ms)")
     return fig
+
+
+def rhythmicity(data, tau=None, window=10):
+    """calculates rhythmicity of autocorrelogram
+    Uses method from: "The medial septum controls hippocampal supra-theta oscillations" Nature Comm. 2023
+
+    Parameters
+    ----------
+    data : np.array
+        autocorrelogram, shape (n_neurons, n_bins)
+    tau : _type_, optional
+        lag times, by default None assumes 1ms bins
+    window : int, optional
+        window to average for peak and trough values, by default 10
+
+    Returns
+    -------
+    rhythmicity score: np.array
+        shape (n_neurons,)
+    """
+
+    if tau is None:
+        tau = np.arange(data.shape[1])  # assume 1ms bins
+    rhythmicity = []
+    for x in data:
+        peak = np.argmax(x[np.logical_and(tau > 50, tau < 200)]) + 50
+        hi_val = np.mean(x[peak - window : peak + window])
+        lo_vals = [
+            np.mean(
+                x[
+                    np.logical_and(
+                        tau > int(peak * 1.5) - window, tau < int(peak * 1.5 + window)
+                    )
+                ]
+            ),
+            np.mean(
+                x[
+                    np.logical_and(
+                        tau > int(peak * 0.5) - window, tau < int(peak * 0.5 + window)
+                    )
+                ]
+            ),
+        ]
+        lo_vals = np.array(lo_vals)
+
+        rhythmicity.append(np.mean((hi_val - lo_vals) / hi_val))
+    return np.array(rhythmicity)
