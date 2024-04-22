@@ -28,6 +28,7 @@ def autocorrelegram(
     min_run_time: float = 0.5,
     return_periodicity_results: bool = False,
     return_auto_corr: bool = False,
+    linear_detrend=False,
 ):
     """Function that calculates autocorrelegrams and periodicity of sorted units under optogenetic stimulation
 
@@ -38,11 +39,13 @@ def autocorrelegram(
         min_run_time (float, optional): minimum time rat must be running to include interval for analysis, seconds. Defaults to 0.5.
         return_periodicity_results (bool, optional): whether to periodicity results, used in plot_periodicity_dependence(). Defaults to False.
         return_auto_corr (bool, optional): whether to return the autocorrelegrams. Used for development. Defaults to False.
+        linear_detrend (bool, optional): whether to linear detrend the autocorrelogram. Defaults to False.
     Returns:
        fig: subplot figure of results
         periodicity_results (optional): list of periodicity outputs from autocorrelegram()
     """
     histogram_bins = np.arange(-0.5, 0.5, 0.002)
+    # histogram_bins = np.arange(0.05, 0.5, 0.002)
 
     # get the matching epochs
     dataset = filter_opto_data(dataset_key)
@@ -152,7 +155,10 @@ def autocorrelegram(
                 sigma = int(0.015 / np.mean(np.diff(histogram_bins)))
                 vals = smooth(vals, 3 * sigma, sigma)
                 bins = bins[:-1] + np.diff(bins) / 2
-                vals = vals / vals.sum()
+                # vals = vals / vals.sum()
+                # if linear_detrend:
+                #     vals = vals - np.polyval(np.polyfit(bins, vals, 1), bins)
+
                 results[i].append(vals)
 
         stim, stim_time = OptoStimProtocol().get_stimulus(pos_key)
@@ -169,6 +175,16 @@ def autocorrelegram(
 
     results = [np.array(r) for r in results]
     stim_results = np.array(stim_results) * np.nan
+
+    if len(results[0]) == 0:
+        if return_periodicity_results:
+            if return_auto_corr:
+                return None, [[], [], [], []], results
+            return (
+                None,
+                [[], [], [], []],
+            )
+        return None
 
     ## plot the results
     fig, ax = plt.subplots(
@@ -269,6 +285,7 @@ def autocorrelegram(
 
     # get the rhythmicity score for test and control
     rhythmicity_score = [rhythmicity(data, tau=bins * 1000) for data in results[:2]]
+    periodicity_results.append(rhythmicity_score)
     delta_rhythmicity = (
         rhythmicity_score[1] - rhythmicity_score[0]
     ) / rhythmicity_score[0]
@@ -281,7 +298,10 @@ def autocorrelegram(
     periodicity_results.append(delta_rhythmicity)
 
     # label and clean up axes
-    y = np.median(results[1].T, axis=1)
+    y = np.concatenate(
+        [np.median(results[1].T, axis=1), np.median(results[0].T, axis=1)]
+    )
+    # ax[2].set_ylim(y.min() * 1.5, y.max() * 1.5)
     ax[2].set_ylim(y.min() * 0.3, y.max() * 1.1)
     # ax[2].set_yscale("log")
 
@@ -429,6 +449,98 @@ def plot_periodicity_dependence(periodicities, driving_periods):
     return fig
 
 
+def rhythmicity_v2(data, tau=None, window=10):
+    """calculates rhythmicity of autocorrelogram
+    Method from "Behavior-Dependent Activity and Synaptic Organization of Septo-hippocampal
+    GABAergic Neurons Selectively Targeting the Hippocampal CA3 Area". Neuron 2017
+    """
+    if tau.max() > 1:
+        tau = tau / 1000.0
+    # get linear trend
+    if tau is None:
+        print("Assuming 1ms bins")
+        tau = np.arange(data.shape[1]) * 0.001  # assume 1ms bins
+    # linear_trend = np.polyval(np.polyfit(tau, data, 1), tau)
+    rhythmicity_ = []
+
+    ind_fit = np.logical_and(tau > 0.050, tau < 0.500)
+    data = data[:, ind_fit]
+    tau = tau[ind_fit]
+    ind_peak = np.logical_and(tau > 0.100, tau < 0.200)
+    for x in data:
+        x = x / np.max(x[ind_peak])
+        x = np.clip(x, 0, 1)
+        trend, fitted_function, params, r_squared = fit_data(tau, x)
+        # print(
+        #     "freq",
+        #     params[0],
+        #     "amplitude",
+        #     params[1],
+        #     "stddev",
+        #     params[2],
+        # )
+        rhythmicity_.append(rhythmicity_index(tau, data, fitted_function, trend))
+    return np.array(rhythmicity_)
+
+
+from scipy.optimize import curve_fit
+from scipy.stats import linregress
+
+
+def linear_trend(x, y):
+    slope, intercept, r_value, p_value, std_err = linregress(x, y)
+    return slope * x + intercept, r_value**2
+
+
+def gaussian_modulated_cosine(x, frequency, amplitude, stddev):
+    return (
+        amplitude * np.exp(-0.5 * (x / stddev) ** 2) * np.cos(2 * np.pi * frequency * x)
+    )
+
+
+def fit_data(x, y):
+    # Fit linear trend
+    trend, r_squared = linear_trend(x, y)
+
+    # Detrend data
+    detrended_data = y - trend
+
+    # Fit Gaussian-modulated cosine
+    # Initial guess: frequency = 6 Hz, amplitude = max(detrended_data), stddev = 50 ms
+    params, covariance = curve_fit(
+        gaussian_modulated_cosine,
+        x,
+        detrended_data,
+        p0=[6, np.max(detrended_data), 0.05],
+    )
+
+    # Calculate fitted function
+    fitted_function = gaussian_modulated_cosine(x, *params)  # + trend
+
+    return trend, fitted_function, params, r_squared
+
+
+def rhythmicity_index(x, y, fitted_function, trend):
+    # Identify peaks within specific interval (adjust according to your data's time scale)
+    valid_inds = np.logical_and((x >= 0.05), (x <= 0.5))
+    width = 0.1 / np.mean(np.diff(x))
+    peak_locs, _ = find_peaks(fitted_function[valid_inds], width=20)
+    neg_peaks, _ = find_peaks(-fitted_function[valid_inds], width=20)
+    peak_locs = np.concatenate([peak_locs, neg_peaks])
+
+    if not peak_locs.size:
+        return 1e-4
+
+    peak_values = np.abs(fitted_function[valid_inds][peak_locs])
+    trend_values = trend[valid_inds][peak_locs]
+
+    # Calculate rhythmicity index
+    index_values = peak_values / trend_values
+    rhythmicity = np.nanmean(index_values)
+
+    return rhythmicity
+
+
 def rhythmicity(data, tau=None, window=10):
     """calculates rhythmicity of autocorrelogram
     Uses method from: "The medial septum controls hippocampal supra-theta oscillations" Nature Comm. 2023
@@ -447,7 +559,7 @@ def rhythmicity(data, tau=None, window=10):
     rhythmicity score: np.array
         shape (n_neurons,)
     """
-
+    return rhythmicity_v2(data, tau, window)
     if tau is None:
         tau = np.arange(data.shape[1])  # assume 1ms bins
     rhythmicity = []
