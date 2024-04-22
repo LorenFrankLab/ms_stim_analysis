@@ -301,29 +301,46 @@ def gkern(l: int = 5, sig: float = 1.0):
     kernel = np.outer(gauss, gauss)
     return kernel / np.sum(kernel)
 
-def violin_scatter(data,pos=0,color="cornflowerblue",bw_method=None, ax=None, return_locs=False):
+
+def violin_scatter(
+    data,
+    pos=0,
+    color="cornflowerblue",
+    bw_method=None,
+    ax=None,
+    return_locs=False,
+    widths=0.5,
+):
     """plot a violin plot with scatter points jiittered around the width of the violin plot"""
     if ax is None:
         ax = plt.gca()
-    vp = ax.violinplot(data,positions=[pos],showmedians=False,showextrema=False,points=1000,bw_method=bw_method)
-    body = vp['bodies'][0]
+    vp = ax.violinplot(
+        data,
+        positions=[pos],
+        showmedians=False,
+        showextrema=False,
+        points=1000,
+        bw_method=bw_method,
+        widths=widths,
+    )
+    body = vp["bodies"][0]
     body.set_facecolor(color)
     path = body.get_paths()[0].vertices
     x_data, y_data = path[:, 0], path[:, 1]
-    y_data = y_data[x_data.size//2:]#-pos
-    x_data = x_data[x_data.size//2:]-pos
-    print(y_data.min())
-    width = x_data[np.digitize(data,y_data,right=False)]
-    x_pos = np.random.normal(0,.3,len(data))*width+pos
-    ax.scatter(x_pos,data,alpha=.5,color=color)
+    y_data = y_data[x_data.size // 2 :]  # -pos
+    x_data = x_data[x_data.size // 2 :] - pos
+    width = x_data[np.digitize(data, y_data, right=False)]
+    x_pos = np.random.normal(0, 0.3, len(data)) * width + pos
+    ax.scatter(x_pos, data, alpha=0.5, color=color)
     if return_locs:
         return x_pos, data
     return
 
 
-def get_slope(data,time):
+def get_slope(data, time):
     from scipy.stats import linregress
+
     slope = []
     for i in range(data.shape[0]):
-        slope.append(linregress(time,data[i]).slope)
+        slope.append(linregress(time, data[i]).slope)
     return np.array(slope)
