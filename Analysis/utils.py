@@ -165,6 +165,162 @@ def bootstrap(x, n_bootstraps, func=np.mean):
     return func(np.array(x)[idx], axis=1)
 
 
+def bootstrap_general(
+    data,
+    sample_size=None,
+    statistic=np.median,
+    conf_interval=95,
+    n_boot=1e5,
+    return_samples=False,
+    **kwargs,
+):
+    if sample_size is None:
+        sample_size = data.shape[0]
+    bootstrap = []
+    for i in range(int(n_boot)):
+        #             bootstrap.append(statistic(np.random.choice(data,sample_size)))
+        bootstrap.append(
+            statistic(
+                data[np.random.choice(np.arange(data.shape[0]), sample_size)], **kwargs
+            )
+        )
+    if return_samples:
+        return (
+            np.mean(bootstrap, axis=0),
+            [
+                np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
+                np.percentile(
+                    bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0
+                ),
+            ],
+            bootstrap,
+        )
+
+    return np.mean(bootstrap, axis=0), [
+        np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
+        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0),
+    ]
+    
+def bootstrap_diff(
+    data1,
+    data2,
+    measurement=None,
+    sample_size=None,
+    statistic=np.mean,
+    n_boot=1e3,
+    conf_interval=95,
+    return_samples=False,
+    **kwargs,
+):
+    """bootstrap comparison of samples from 2 datasets
+
+    Args:
+        data1: first dataset
+        data2: second dataset
+        measurement: the value being calculated from samples (see measurement.py)
+        sample_size (_type_, optional): _description_. Defaults to None.
+        statistic (_type_, optional): how to compile across trials. Defaults to np.mean.
+        n_boot: number of bootstrap samples. Defaults to 1e3.
+        conf_interval (int, optional): confidence interval bounds to return. Defaults to 95.
+        return_samples (bool, optional): whether to return the bootstrapped distribution. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
+    y, rng, boot = bootstrap_compare(
+        data1,
+        data2,
+        np.subtract,
+        measurement,
+        sample_size,
+        statistic,
+        n_boot,
+        conf_interval,
+        return_samples=True,
+        **kwargs,
+    )
+    if return_samples:
+        if rng[0] > 0 or rng[1] < 0:
+            return y, rng, True, boot
+        else:
+            return y, rng, False, boot
+    if rng[0] > 0 or rng[1] < 0:
+        return y, rng, True
+    else:
+        return y, rng, False
+
+
+def bootstrap_compare(
+    data1,
+    data2,
+    operator=np.subtract,
+    measurement=None,
+    sample_size=None,
+    statistic=np.mean,
+    n_boot=1e3,
+    conf_interval=95,
+    return_samples=False,
+    **kwargs,
+):
+    """bootstap comparison of samples from 2 datasets"""
+    """bootstrap comparison of samples from 2 datasets
+    data1: first dataset
+    data2: second dataset
+    operator: how we compare the measurements
+    measurement: the value being calculated from samples (see measurement.py)
+    ***for efficiency, precalculate measurement and use None value for non-population averaged measures
+    statistic: what value of the distribution of operator results we care about (*irrelevant for population based measures)
+    n_boot: number of bootstrap samples
+    conf_interval: confidence interval
+    return_samples: whether to return the samples
+
+    Returns:
+    mean: mean of the bootstrap samples
+    confidence interval
+    whether the confidence interval does not include 0
+    """
+    # measurement: the value being calculated from samples (see measurement.py)
+    #    ***for efficiency, precalculate measurement and use None value for non-population averaged measures
+    # operator: how we compare the measurements
+    # statistic: what value of the distribution of operator results we care about (*irrelevant for population based measures)
+
+    if sample_size is None:
+        sample_size = data1.shape[0]  # min(data1.shape[0],data2.shape[0])
+    if measurement is None:
+        measurement = lambda x: x
+    bootstrap = []
+    for i in tqdm(range(int(n_boot)), position=0, leave=True):
+        #     for i in range(int(n_boot)):
+        bootstrap.append(
+            statistic(
+                operator(
+                    measurement(
+                        data1[np.random.choice(np.arange(data1.shape[0]), sample_size)],
+                        **kwargs,
+                    ),
+                    measurement(
+                        data2[np.random.choice(np.arange(data2.shape[0]), sample_size)],
+                        **kwargs,
+                    ),
+                )
+            )
+        )
+    bootstrap = np.array(bootstrap)
+    if return_samples:
+        return (
+            np.mean(bootstrap),
+            [
+                np.percentile(bootstrap, (100 - conf_interval) / 2),
+                np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2),
+            ],
+            bootstrap,
+        )
+
+    return np.mean(bootstrap), [
+        np.percentile(bootstrap, (100 - conf_interval) / 2),
+        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2),
+    ]
+
 def get_running_valid_intervals(
     pos_key: dict,
     filter_speed: float = 10,
