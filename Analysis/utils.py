@@ -487,7 +487,10 @@ def violin_scatter(
     x_data = x_data[x_data.size // 2 :] - pos
     width = x_data[np.digitize(data, y_data, right=False)]
     x_pos = np.random.normal(0, 0.3, len(data)) * width + pos
-    ax.scatter(x_pos, data, alpha=0.5, color=color)
+    alpha = 1 - (len(data)) / (len(data) + 20)
+    alpha = np.min([.5, alpha])
+    alpha = np.max([0.01, alpha])
+    ax.scatter(x_pos, data, alpha=alpha, color=color)
     if return_locs:
         return x_pos, data
     return
