@@ -76,6 +76,8 @@ LFP_AMP_CUTOFF = 2000
 
 
 ################################################################################
+
+
 def get_yaml_defined_reference_electrode(key: dict) -> int:
     electrode_group_name = (ElectrodeGroup & key & {"description": "reference"}).fetch(
         "electrode_group_name"
@@ -300,11 +302,17 @@ def get_control_test_power_spectrum(
         np.logical_and(lfp_timestamps > interval[0], lfp_timestamps < interval[1])
     )[0]
     # filter out high amplitude noise
+    # non_noise_intervals = np.array(
+    #     noise_free_lfp_intervals(
+    #         lfp_s_key,
+    #     )
+    # )
     non_noise_intervals = np.array(
-        noise_free_lfp_intervals(
-            lfp_s_key,
+        noise_free_lfp_intervals_NO_TABLE(
+            lfp_timestamps, lfp_eseries.data, LFP_AMP_CUTOFF
         )
     )
+
     if len(optogenetic_run_interval) == 0 or len(control_run_interval) == 0:
         print(f"Warning: no runs found in either/or control/test test intervals")
         return (
@@ -1278,6 +1286,7 @@ def lfp_per_pulse_analysis(
     return_data=False,
     traces_only=False,
     circular_shuffle=False,
+    limit_1_epoch=False,
 ):
     """Generates a figure characterizing the lfp around each stimulus pulse
 
@@ -1301,7 +1310,8 @@ def lfp_per_pulse_analysis(
         whether to return the lfp traces amplitudes and phases, by default False
     circular_shuffle : bool, optional
         whether to circularly shuffle the lfp traces, by default False
-
+    limit_1_epoch : bool, optional
+        whether to limit the analysis to 1 epoch per dataset, by default False
     Returns
     -------
     matplotlib.figure.Figure
@@ -1342,6 +1352,10 @@ def lfp_per_pulse_analysis(
             ax_rose = fig.get_axes()[3:]
     nwb_file_name_list = dataset.fetch("nwb_file_name")
     interval_list_name_list = dataset.fetch("interval_list_name")
+    if limit_1_epoch:
+        nwb_file_name_list = nwb_file_name_list[:1]
+        interval_list_name_list = interval_list_name_list[:1]
+
     # get the lfp traces for every relevant pulse
     lfp_traces = [[] for p in pulse_number_list]
     # get time-shuffled lfp_traces for every relevant pulse
@@ -1383,7 +1397,7 @@ def lfp_per_pulse_analysis(
         lfp_df = (LFPV1() & basic_key).fetch_nwb()[0]["lfp"]
         lfp_df = (LFPV1() & basic_key).fetch1_dataframe()
         lfp_timestamps = lfp_df.index
-        lfp_ = np.array(lfp_df[ref_index])
+        lfp_ = np.array(lfp_df[ref_index]).astype(float)
         # nan out artifact intervals
         artifact_times = (LFPArtifactDetection() & basic_key).fetch1("artifact_times")
         for artifact in artifact_times:
@@ -2320,8 +2334,8 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
             "interval_list_name": interval_list_name,
             "dio_event_name": "stim",
         }
-        if len(LFPBandV1 & basic_key) == 0:
-            continue
+        # if len(LFPBandV1 & basic_key) == 0:
+        #     continue
 
         # get lfp data
         ref_elect, basic_key = get_ref_electrode_index(basic_key)  #
@@ -2386,14 +2400,24 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
                 continue
             # skip the high amplitude noise
             if (
-                np.max(
+                # np.max(
+                #     lfp_[
+                #         ind
+                #         + lfp_trace_window[0]
+                #         - padding : ind
+                #         + lfp_trace_window[1]
+                #         + padding
+                #     ]
+                # )
+                np.percentile(
                     lfp_[
                         ind
                         + lfp_trace_window[0]
                         - padding : ind
                         + lfp_trace_window[1]
                         + padding
-                    ]
+                    ],
+                    99,
                 )
                 > LFP_AMP_CUTOFF
             ):
