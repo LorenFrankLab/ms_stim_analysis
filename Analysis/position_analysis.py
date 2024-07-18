@@ -21,10 +21,13 @@ from spyglass.common import (
     LFPBand,
     LFPBandSelection,
     get_electrode_indices,
+    PositionIntervalMap,
 )
-from spyglass.position.v1 import TrodesPosV1
+from spyglass.position.v1 import TrodesPosV1, DLCPosV1
 from spyglass.position import PositionOutput
 from spyglass.linearization.v1 import LinearizedPositionV1, TrackGraph
+from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 
 import sys
 from Metadata.ms_task_identification import TaskIdentification
@@ -36,6 +39,7 @@ def get_running_intervals(
     epoch: int = None,
     interval_list_name: str = None,
     filter_speed: float = 10,
+    dlc_pos: bool = False,
     **kwargs,
 ) -> list:
     """get list of interval times when rat is running
@@ -50,6 +54,8 @@ def get_running_intervals(
         interval name for position data, if None, will look up the interval name for the epoch
     filter_speed : float, optional
         threshold speed to define running (in cm/s), by default 10
+    dlc_pos : bool, optional
+        whether to use dlc position data, by default False
 
     Returns
     -------
@@ -64,16 +70,22 @@ def get_running_intervals(
             "interval_list_name"
         )
     key.update({"interval_list_name": interval_list_name})
-    speed = (
-        (TrodesPosV1() & key & {"trodes_pos_params_name": trodes_pos_params_name})
-        .fetch_nwb()[0]["velocity"]["velocity"]
-        .data[:, 2]
-    )
-    speed_time = (
-        (TrodesPosV1() & key & {"trodes_pos_params_name": trodes_pos_params_name})
-        .fetch_nwb()[0]["velocity"]["velocity"]
-        .timestamps[:]
-    )
+    if dlc_pos:
+        df = (DLCPosV1() & key).fetch1_dataframe()
+        speed = df["speed"].values()
+        speed_time = df.index.values()
+
+    else:
+        speed = (
+            (TrodesPosV1() & key & {"trodes_pos_params_name": trodes_pos_params_name})
+            .fetch_nwb()[0]["velocity"]["velocity"]
+            .data[:, 2]
+        )
+        speed_time = (
+            (TrodesPosV1() & key & {"trodes_pos_params_name": trodes_pos_params_name})
+            .fetch_nwb()[0]["velocity"]["velocity"]
+            .timestamps[:]
+        )
 
     # make intervals where rat is running
     speed_binary = (speed > filter_speed).astype(int)
@@ -87,7 +99,9 @@ def get_running_intervals(
     return run_intervals
 
 
-def lineartrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
+def lineartrack_position_filter(
+    key: dict, buffer: float = 10, dlc_pos: bool = False, **kwargs
+) -> list:
     """get list of interval times when rat is NOT at the ends of the linear track
     # 12.12.23: switch to using linearized position instead of x position
 
@@ -105,12 +119,30 @@ def lineartrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list
     """
 
     # get the position data
-    if not "pos_merge_id" in key:
-        merge_id = (
-            (PositionOutput.TrodesPosV1 & key)
-            & "trodes_pos_params_name LIKE '%upsampled'"
-        ).fetch1("merge_id")
-        key["pos_merge_id"] = merge_id
+    if "pos_merge_id" not in key:
+        if dlc_pos:
+            map_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "position_interval_name": key["interval_list_name"],
+            }
+            epoch = list(
+                set(((PositionIntervalMap() & map_key) * TaskEpoch).fetch("epoch"))
+            )
+            if len(epoch) > 1:
+                raise ValueError("More than one epoch found for", map_key)
+            dlc_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "epoch": epoch[0],
+            }
+            merge_id = (PositionOutput.DLCPosV1() & dlc_key).fetch1("merge_id")
+            key["pos_merge_id"] = merge_id
+
+        else:
+            merge_id = (
+                (PositionOutput.TrodesPosV1 & key)
+                & "trodes_pos_params_name LIKE '%upsampled'"
+            ).fetch1("merge_id")
+            key["pos_merge_id"] = merge_id
     # get the linearized position data
     df_ = (
         LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_lineartrack%'"
@@ -143,7 +175,9 @@ def lineartrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list
     return valid_intervals
 
 
-def wtrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
+def wtrack_position_filter(
+    key: dict, buffer: float = 10, dlc_pos: bool = False, **kwargs
+) -> list:
     """get list of interval times when rat is NOT at the ports of the w-track
 
     Parameters
@@ -152,6 +186,8 @@ def wtrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
         key for TrodesPosV1
     buffer : float, optional
         buffer zone around the ports, by default 10
+    dlc_pos : bool, optional
+        whether to use dlc position data, by default False
 
     Returns
     -------
@@ -159,12 +195,31 @@ def wtrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
         list of time intervals when rat is not at the ports of the w-track
     """
     # get the position data
-    if not "pos_merge_id" in key:
-        merge_id = (
-            (PositionOutput.TrodesPosV1 & key)
-            & "trodes_pos_params_name LIKE '%upsampled'"
-        ).fetch1("merge_id")
-        key["pos_merge_id"] = merge_id
+    if "pos_merge_id" not in key:
+        if dlc_pos:
+            map_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "position_interval_name": key["interval_list_name"],
+            }
+            epoch = list(
+                set(((PositionIntervalMap() & map_key) * TaskEpoch).fetch("epoch"))
+            )
+            if len(epoch) > 1:
+                raise ValueError("More than one epoch found for", map_key)
+            dlc_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "epoch": epoch[0],
+            }
+            merge_id = (PositionOutput.DLCPosV1() & dlc_key).fetch1("merge_id")
+            key["pos_merge_id"] = merge_id
+
+        else:
+            merge_id = (
+                (PositionOutput.TrodesPosV1 & key)
+                & "trodes_pos_params_name LIKE '%upsampled'"
+            ).fetch1("merge_id")
+            key["pos_merge_id"] = merge_id
+
     # get the linearized position data
     lin_key = (
         LinearizedPositionV1() & key & "track_graph_name LIKE '%ms_wtrack%'"
@@ -172,7 +227,7 @@ def wtrack_position_filter(key: dict, buffer: float = 10, **kwargs) -> list:
     df_ = (LinearizedPositionV1() & lin_key).fetch1_dataframe()
     x = np.asarray(df_["linear_position"])
 
-    # get the infp about the ports
+    # get the info about the ports
     from spyglass.linearization.v1 import TrackGraph
 
     graph = (TrackGraph() & lin_key).get_networkx_track_graph()

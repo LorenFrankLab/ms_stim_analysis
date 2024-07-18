@@ -200,7 +200,8 @@ def bootstrap_general(
         np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
         np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0),
     ]
-    
+
+
 def bootstrap_diff(
     data1,
     data2,
@@ -321,11 +322,13 @@ def bootstrap_compare(
         np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2),
     ]
 
+
 def get_running_valid_intervals(
     pos_key: dict,
     filter_speed: float = 10,
     filter_ports: bool = True,
     seperate_optogenetics: bool = True,
+    dlc_pos: bool = False,
 ):
     """Find intervals where rat is running and not in a port.  if seperate_optogenetics, then also separate into intervals where optogenetics are and ar not running
 
@@ -334,6 +337,7 @@ def get_running_valid_intervals(
         filter_speed (float, optional): speed threshold for running. Defaults to 10.
         filter_ports (bool, optional): whether to filter out port intervals. Defaults to True.
         seperate_optogenetics (bool, optional): whether to seperate into optogenetic and control intervals. Defaults to True.
+        dlc_pos (bool, optional): whether to use DLC position data. Defaults to False.
 
     Returns:
         if not seperate_optogenetics:
@@ -343,10 +347,12 @@ def get_running_valid_intervals(
         control_run_interval (list): intervals where rat is running and in control interval
     """
     # make intervals where rat is running
-    run_intervals = get_running_intervals(**pos_key, filter_speed=filter_speed)
+    run_intervals = get_running_intervals(
+        **pos_key, filter_speed=filter_speed, dlc_pos=dlc_pos
+    )
     # intersect with position-defined intervals
     if filter_ports:
-        valid_position_intervals = filter_position_ports(pos_key)
+        valid_position_intervals = filter_position_ports(pos_key, dlc_pos=dlc_pos)
         run_intervals = interval_list_intersect(
             np.array(run_intervals), np.array(valid_position_intervals)
         )
@@ -466,6 +472,8 @@ def violin_scatter(
     ax=None,
     return_locs=False,
     widths=0.5,
+    mark_mean=False,
+    alpha=None,
 ):
     """plot a violin plot with scatter points jiittered around the width of the violin plot"""
     if ax is None:
@@ -488,9 +496,12 @@ def violin_scatter(
     width = x_data[np.digitize(data, y_data, right=False)]
     x_pos = np.random.normal(0, 0.3, len(data)) * width + pos
     alpha = 1 - (len(data)) / (len(data) + 20)
-    alpha = np.min([.5, alpha])
-    alpha = np.max([0.01, alpha])
+    if alpha is None:
+        alpha = np.min([0.5, alpha])
+        alpha = np.max([0.01, alpha])
     ax.scatter(x_pos, data, alpha=alpha, color=color)
+    if mark_mean:
+        ax.scatter(pos, np.mean(data), color=color)
     if return_locs:
         return x_pos, data
     return
@@ -503,3 +514,10 @@ def get_slope(data, time):
     for i in range(data.shape[0]):
         slope.append(linregress(time, data[i]).slope)
     return np.array(slope)
+
+
+def parse_unit_ids(unit_ids):
+    """parse unit_ids from from dict to unique string for hashability"""
+    if type(unit_ids[0]) is dict:
+        unit_ids = [f"{x['spikesorting_merge_id']}_{x['unit_id']}" for x in unit_ids]
+    return unit_ids
