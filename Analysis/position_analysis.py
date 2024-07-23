@@ -66,14 +66,26 @@ def get_running_intervals(
     key = {"nwb_file_name": nwb_file_name}
     key.update({"epoch": epoch})
     if interval_list_name is None:
-        interval__list_name = (EpochIntervalListName() & key).fetch1(
+        interval_list_name = (EpochIntervalListName() & key).fetch1(
             "interval_list_name"
         )
     key.update({"interval_list_name": interval_list_name})
     if dlc_pos:
+        if epoch is None:
+            map_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "position_interval_name": key["interval_list_name"],
+            }
+            epoch = list(
+                set(((PositionIntervalMap() & map_key) * TaskEpoch).fetch("epoch"))
+            )
+            if len(epoch) > 1:
+                raise ValueError("More than one epoch found for", map_key)
+            epoch = epoch[0]
+            key["epoch"] = epoch
         df = (DLCPosV1() & key).fetch1_dataframe()
-        speed = df["speed"].values()
-        speed_time = df.index.values()
+        speed = df["speed"].values
+        speed_time = df.index.values
 
     else:
         speed = (
