@@ -388,13 +388,13 @@ class OptoStimProtocol(dj.Computed):
             "valid_times": control_interval,
         }
         sgc.IntervalList().insert1(control_interval_key, skip_duplicates=True)
-        
+
         # the stimulus on intervals
         stim, stim_time = (OptoStimProtocol() & key).get_stimulus(key)
         if stim.size == 0:
             return
         ind_on = np.where(stim == 1)[0]
-        stim_intervals = [[stim_time[i],stim_time[i+1]] for i in ind_on]
+        stim_intervals = [[stim_time[i], stim_time[i + 1]] for i in ind_on]
         stim_intervals = np.array(stim_intervals)
         stim_interval_key = {
             "nwb_file_name": key["nwb_file_name"],
