@@ -137,5 +137,4 @@ class ClusterlessValidDecodeTimes(SpyglassMixin, dj.Computed):
         ind = np.logical_and(time > stim_time - window, time < stim_time + window)
         dt = np.mean(np.diff(time[ind]))
         bad_decode = np.abs(ahead_behind[ind]) > threshold_distance
-        print(ahead_behind[ind])
         return np.sum(bad_decode) * dt < threshold_time
