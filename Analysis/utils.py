@@ -55,6 +55,10 @@ def filter_task(table: UserTable, task: str) -> UserTable:
     UserTable
         filtered table
     """
+    if task == "early_wtrack":
+        filter_table = filter_task(table, "wtrack")
+        return filter_table & early_wtrack_keys
+
     wtrack_aliases = ["wtrack", "w-track", "w track", "W-track", "W track", "Wtrack"]
     lineartrack_aliases = [
         "lineartrack",
@@ -323,6 +327,30 @@ def bootstrap_compare(
     ]
 
 
+def bootstrap_traces(
+    data,
+    sample_size=None,
+    statistic=np.mean,
+    n_boot=1e3,
+    conf_interval=95,
+):
+    if sample_size is None:
+        sample_size = data.shape[0]
+    bootstrap = []
+    #     for i in tqdm(range(int(n_boot)),position=0,leave=True):
+    for i in range(int(n_boot)):
+        bootstrap.append(
+            statistic(
+                data[np.random.choice(np.arange(data.shape[0]), sample_size), :], axis=0
+            )
+        )
+    bootstrap = np.array(bootstrap)
+    return np.mean(bootstrap, axis=0), [
+        np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
+        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0),
+    ]
+
+
 def get_running_valid_intervals(
     pos_key: dict,
     filter_speed: float = 10,
@@ -425,13 +453,15 @@ def filter_opto_data(dataset_key: dict):
     return dataset
 
 
-def smooth(data, n=5, sigma=None):
+def smooth(data, n=5, sigma=None, hamming=False):
     """smooths data with gaussian kernel of size n"""
     if n % 2 == 0:
         n += 1  # make sure n is odd
     if sigma is None:
         sigma = n / 2
     kernel = gkern(n, sigma)[:, None]
+    if hamming:
+        kernel = np.ones((sigma, 1)) / sigma
     if len(data.shape) == 1:
         pad = np.ones(((n - 1) // 2, 1))
         return np.squeeze(
@@ -521,3 +551,21 @@ def parse_unit_ids(unit_ids):
     if type(unit_ids[0]) is dict:
         unit_ids = [f"{x['spikesorting_merge_id']}_{x['unit_id']}" for x in unit_ids]
     return unit_ids
+
+
+early_wtrack_files = [
+    "Yoshi20220517_.nwb",
+    "Yoshi20220518_.nwb",
+    "Olive20220711_.nwb",
+    "Wallie20220922_.nwb",
+    "Bilbo20230802_.nwb",
+    "Bilbo20230804_.nwb",
+    "Totoro20220613_.nwb",
+    "Totoro20220614_.nwb",
+    "Winnie20220719_.nwb",
+    "Banner20220224_.nwb",
+    "Banner20220225_.nwb",
+    "Frodo20230814_.nwb",
+]
+
+early_wtrack_keys = [dict(nwb_file_name=x) for x in early_wtrack_files]
