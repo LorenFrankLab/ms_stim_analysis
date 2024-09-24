@@ -7,20 +7,67 @@ plt.rcParams["svg.fonttype"] = "none"
 transfection_style = {"transfected": "indianred", "control": "grey"}
 
 animal_style = [
-    {"name": "Winnie", "color": "darkorange", "alias": "Rat V","background":transfection_style["transfected"]},
-    {"name": "Frodo", "color": "goldenrod", "alias": "Rat F","background":transfection_style["transfected"]},
-    {"name": "Totoro", "color": "sandybrown", "alias": "Rat T","background":transfection_style["transfected"]},
-    {"name": "Banner", "color": "coral", "alias": "Rat B","background":transfection_style["transfected"]},
+    {
+        "name": "Winnie",
+        "color": "darkorange",
+        "alias": "Rat V",
+        "background": transfection_style["transfected"],
+    },
+    {
+        "name": "Frodo",
+        "color": "goldenrod",
+        "alias": "Rat F",
+        "background": transfection_style["transfected"],
+    },
+    {
+        "name": "Totoro",
+        "color": "sandybrown",
+        "alias": "Rat T",
+        "background": transfection_style["transfected"],
+    },
+    {
+        "name": "Banner",
+        "color": "coral",
+        "alias": "Rat B",
+        "background": transfection_style["transfected"],
+    },
+    {
+        "name": "Odins",
+        "color": "peru",
+        "alias": "Rat O",
+        "background": transfection_style["transfected"],
+    },
     # controls
-    {"name": "Wallie", "color": "slategrey", "alias": "Rat W","background":transfection_style["control"]},
-    {"name": "Olive", "color": "lightsteelblue", "alias": "Rat L","background":transfection_style["control"]},
-    {"name": "Yoshi", "color": "silver", "alias": "Rat Y","background":transfection_style["control"]},
-    {"name": "Bilbo", "color": "darkgrey", "alias": "Rat I","background":transfection_style["control"]},
+    {
+        "name": "Wallie",
+        "color": "slategrey",
+        "alias": "Rat W",
+        "background": transfection_style["control"],
+    },
+    {
+        "name": "Olive",
+        "color": "lightsteelblue",
+        "alias": "Rat L",
+        "background": transfection_style["control"],
+    },
+    {
+        "name": "Yoshi",
+        "color": "silver",
+        "alias": "Rat Y",
+        "background": transfection_style["control"],
+    },
+    {
+        "name": "Bilbo",
+        "color": "darkgrey",
+        "alias": "Rat I",
+        "background": transfection_style["control"],
+    },
 ]
 animal_style = pd.DataFrame(animal_style)
 animal_style.set_index("name", inplace=True)
 
 interval_style = {"test": "#DA70D6", "control": "#7BC8F6"}  # C875C4",
+
 
 def style_sample():
     fig, ax = plt.subplots(ncols=2, figsize=(10, 5))
