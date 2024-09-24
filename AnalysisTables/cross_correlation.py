@@ -33,6 +33,7 @@ class CrossCorrelogramParameters(SpyglassMixin, dj.Manual):
     ---
     interval_buffer = NULL: float
     filter_speed = 10: float
+    filter_port = 1: bool
     min_run_time = .5: float
     gauss_smooth = 0.003: float
     max_lag = .5: int
@@ -54,6 +55,7 @@ class CrossCorrelogramParameters(SpyglassMixin, dj.Manual):
             },
             skip_duplicates=True,
         )
+
         self.insert1(
             {
                 "cross_corr_params_name": "default_dlc",
@@ -64,6 +66,21 @@ class CrossCorrelogramParameters(SpyglassMixin, dj.Manual):
                 "max_lag": 0.5,
                 "closest_spike_only": False,
                 "dlc_position": True,
+            },
+            skip_duplicates=True,
+        )
+
+        self.insert1(
+            {
+                "cross_corr_params_name": "all_times",
+                "interval_buffer": 0,
+                "filter_speed": 0,
+                "min_run_time": 0,
+                "gauss_smooth": 0.003,
+                "max_lag": 0.5,
+                "closest_spike_only": False,
+                "dlc_position": False,
+                "filter_port": False,
             },
             skip_duplicates=True,
         )
@@ -92,6 +109,7 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
         filter_speed = (CrossCorrelogramParameters & key).fetch1("filter_speed")
         min_run_time = (CrossCorrelogramParameters & key).fetch1("min_run_time")
         gauss_smooth = (CrossCorrelogramParameters & key).fetch1("gauss_smooth")
+        filter_ports = (CrossCorrelogramParameters & key).fetch1("filter_port")
         max_lag = (CrossCorrelogramParameters & key).fetch1("max_lag")
         interval_buffer = (CrossCorrelogramParameters & key).fetch1("interval_buffer")
         closest_spike_only = (CrossCorrelogramParameters & key).fetch1(
@@ -105,25 +123,28 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
         )
         unit_ids = parse_unit_ids(unit_ids)
 
-        # get the running intervals
-        pos_interval = convert_epoch_interval_name_to_position_interval_name(
-            (IntervalList & key).fetch1("KEY")
-        )
-        if not pos_interval or pos_interval is None:
-            pos_interval = key["interval_list_name"].split("_")[0]
-
-        pos_key = {
-            "nwb_file_name": key["nwb_file_name"],
-            "interval_list_name": pos_interval,
-        }
-
         # define what intervals to use
-        run_intervals = get_running_valid_intervals(
-            pos_key,
-            seperate_optogenetics=False,
-            filter_speed=filter_speed,
-            dlc_pos=dlc_position,
-        )
+        if filter_speed or filter_ports:
+            # get the running intervals
+            pos_interval = convert_epoch_interval_name_to_position_interval_name(
+                (IntervalList & key).fetch1("KEY")
+            )
+            if not pos_interval or pos_interval is None:
+                pos_interval = key["interval_list_name"].split("_")[0]
+
+            pos_key = {
+                "nwb_file_name": key["nwb_file_name"],
+                "interval_list_name": pos_interval,
+            }
+
+            run_intervals = get_running_valid_intervals(
+                pos_key,
+                seperate_optogenetics=False,
+                filter_speed=filter_speed,
+                dlc_pos=dlc_position,
+            )
+        else:
+            run_intervals = (IntervalList & key).fetch1("valid_times")
         run_intervals = np.array(
             [
                 interval
@@ -219,7 +240,8 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
         AnalysisNwbfile().add(nwb_file_name, analysis_file_name)
         self.insert1(key)
 
-    def fetch_dataframe(self) -> pd.DataFrame:
+    def fetch_dataframe(self, min_spike_count=None) -> pd.DataFrame:
+        # query = "counts_1 > @min_spike and counts_2 > @min_spike_count"
         return pd.concat([data["corr"] for data in self.fetch_nwb()])
 
     def fetch_auto_correlograms(self) -> pd.DataFrame:
