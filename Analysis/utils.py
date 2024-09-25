@@ -59,6 +59,10 @@ def filter_task(table: UserTable, task: str) -> UserTable:
         filter_table = filter_task(table, "wtrack")
         return filter_table & early_wtrack_keys
 
+    if task == "first_wtrack":
+        filter_table = filter_task(table, "wtrack")
+        return filter_table & first_wtrack_keys
+
     wtrack_aliases = ["wtrack", "w-track", "w track", "W-track", "W track", "Wtrack"]
     lineartrack_aliases = [
         "lineartrack",
@@ -569,3 +573,12 @@ early_wtrack_files = [
 ]
 
 early_wtrack_keys = [dict(nwb_file_name=x) for x in early_wtrack_files]
+
+first_wtrack_keys = [{"nwb_file_name": "Yoshi20220517_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Olive20220711_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Wallie20220922_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Bilbo20230802_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Totoro20220613_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Winnie20220719_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Banner20220224_.nwb","interval_list_name": "pos 1 valid times"},
+                     {"nwb_file_name": "Frodo20230814_.nwb","interval_list_name": "pos 1 valid times"}]
