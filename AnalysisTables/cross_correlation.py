@@ -127,7 +127,7 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
         if filter_speed or filter_ports:
             # get the running intervals
             pos_interval = convert_epoch_interval_name_to_position_interval_name(
-                (IntervalList & key).fetch1("KEY")
+                (IntervalList & key).fetch1("KEY"),populate_missing=False
             )
             if not pos_interval or pos_interval is None:
                 pos_interval = key["interval_list_name"].split("_")[0]
