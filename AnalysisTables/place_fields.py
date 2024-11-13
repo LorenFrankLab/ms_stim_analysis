@@ -1,6 +1,10 @@
 import os
 
 import datajoint as dj
+from non_local_detector.analysis import (
+    get_HPD_spatial_coverage,
+    get_highest_posterior_threshold,
+)
 import numpy as np
 import pandas as pd
 from spyglass.common import (
@@ -9,6 +13,8 @@ from spyglass.common import (
     Session,
     interval_list_contains,
 )
+import xarray as xr
+
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.utils.dj_mixin import SpyglassMixin, SpyglassMixinPart
 
@@ -189,3 +195,95 @@ class OptoPlaceField(SpyglassMixin, dj.Computed):
 
     def fetch_dataframe(self) -> pd.DataFrame:
         return pd.concat([data["place"] for data in self.fetch_nwb()])
+
+
+@schema
+class PlaceFieldCoverageParams(SpyglassMixin, dj.Manual):
+    definition = """
+    unit_coverage_params_name: varchar(64)
+    ---
+    spatial_coverage_threshold: float
+    """
+
+    def insert_default(self):
+        key = {
+            "unit_coverage_params_name": "default",
+            "spatial_coverage_threshold": 0.95,
+        }
+        self.insert1(key, skip_duplicates=True)
+
+
+@schema
+class PlaceFieldCoverageSelection(SpyglassMixin, dj.Manual):
+    definition = """
+    -> OptoPlaceField
+    -> PlaceFieldCoverageParams
+    ---
+    """
+
+
+@schema
+class PlaceFieldCoverage(SpyglassMixin, dj.Computed):
+    definition = """
+    -> PlaceFieldCoverageSelection
+    ---
+    -> AnalysisNwbfile
+    coverage_object_id: varchar(255)
+    """
+
+    def make(self, key):
+        # fetch the threshold
+        threshold = (PlaceFieldCoverageParams & key).fetch1(
+            "spatial_coverage_threshold"
+        )
+
+        # fetch the place fields
+        spike_df = (OptoPlaceField() & key).fetch_dataframe()
+        fields = spike_df.place_field.values
+        fields = np.array([f / np.sum(f) for f in fields])
+
+        # calculate the coverage
+        fields_xr = xr.DataArray(
+            fields,
+            dims=["unit", "position"],
+        )
+        thresholds = get_highest_posterior_threshold(fields_xr, threshold)
+        coverage = get_HPD_spatial_coverage(fields_xr, thresholds)
+
+        # save the results
+        coverage_df = pd.DataFrame(
+            {
+                "coverage": coverage,
+                "unit_id": spike_df.unit_id,
+                "condition": spike_df.condition,
+            }
+        )
+
+        analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
+        key["analysis_file_name"] = analysis_file_name
+        key["coverage_object_id"] = AnalysisNwbfile().add_nwb_object(
+            key["analysis_file_name"], coverage_df, "place_field_coverage"
+        )
+        AnalysisNwbfile().add(key["nwb_file_name"], key["analysis_file_name"])
+        self.insert1(key)
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        return pd.concat([data["coverage"] for data in self.fetch_nwb()])
+
+
+@schema
+class TrackCellCoverageParams(dj.Manual):
+    definition = """
+    unit_coverage_params_name: varchar(64)
+    ---
+    spatial_coverage_threshold: float # threshold for the percentile coverage of the unit
+    coverage_width_threshold: float #threshold for the width of the unit's coverage (in bins)
+    """
+
+    def insert_default(self):
+        key = {
+            "unit_coverage_params_name": "default",
+            "spatial_coverage_threshold": 0.95,
+            "coverage_width_threshold": 75,
+        }
+        self.insert1(key, skip_duplicates=True)
