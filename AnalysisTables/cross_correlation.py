@@ -39,6 +39,7 @@ class CrossCorrelogramParameters(SpyglassMixin, dj.Manual):
     max_lag = .5: int
     closest_spike_only = 0: bool
     dlc_position = 0: bool
+    exclude_simultaneous = 0: bool
     """
 
     def insert_default(self):
@@ -116,6 +117,9 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
             "closest_spike_only"
         )
         dlc_position = (CrossCorrelogramParameters & key).fetch1("dlc_position")
+        exclude_simultaneous = (CrossCorrelogramParameters & key).fetch1(
+            "exclude_simultaneous"
+        )
 
         # get spike data
         spikes_list, unit_ids = (SortedSpikesGroup & key).fetch_spike_data(
@@ -203,6 +207,8 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
                     )
 
                 delays = np.ravel(delays)
+                if exclude_simultaneous:
+                    delays = delays[delays != 0]
                 delays = delays[delays < histogram_bins[-1]]
                 delays = delays[delays >= histogram_bins[0]]
                 vals, bins = np.histogram(delays, bins=histogram_bins)
