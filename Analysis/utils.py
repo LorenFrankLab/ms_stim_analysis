@@ -3,6 +3,7 @@ from spyglass.common import Session, interval_list_contains_ind, interval_list_i
 from datajoint.user_tables import UserTable
 import numpy as np
 from typing import Tuple
+from tqdm import tqdm
 
 import os
 import scipy
@@ -37,7 +38,12 @@ def filter_animal(table: UserTable, animal: str) -> UserTable:
     """
     if len(animal) == 0:
         return table
-    return table & ((table * Session) & {"subject_id": animal}).fetch("KEY")
+    animal_key = {"subject_id": animal}
+    if animal =="transfected":
+        animal_key = [{"subject_id": name} for name in [ "Totoro", "Winnie", "Banner", "Frodo","Odins"]]
+    elif animal == "control":
+        animal_key = [{"subject_id": name} for name in ["Yoshi", "Olive", "Wallie", "Bilbo"]]
+    return table & ((table * Session) & animal_key).fetch("KEY")
 
 
 def filter_task(table: UserTable, task: str) -> UserTable:
@@ -317,17 +323,17 @@ def bootstrap_compare(
     bootstrap = np.array(bootstrap)
     if return_samples:
         return (
-            np.mean(bootstrap),
+            np.mean(bootstrap,axis=0),
             [
-                np.percentile(bootstrap, (100 - conf_interval) / 2),
-                np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2),
+                np.percentile(bootstrap, (100 - conf_interval) / 2,axis=0),
+                np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2,axis=0),
             ],
             bootstrap,
         )
 
-    return np.mean(bootstrap), [
-        np.percentile(bootstrap, (100 - conf_interval) / 2),
-        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2),
+    return np.mean(bootstrap,axis=0), [
+        np.percentile(bootstrap, (100 - conf_interval) / 2,axis=0),
+        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2,axis=0),
     ]
 
 
@@ -465,7 +471,7 @@ def smooth(data, n=5, sigma=None, hamming=False):
         sigma = n / 2
     kernel = gkern(n, sigma)[:, None]
     if hamming:
-        kernel = np.ones((sigma, 1)) / sigma
+        kernel = np.ones((n, 1)) / n
     if len(data.shape) == 1:
         pad = np.ones(((n - 1) // 2, 1))
         return np.squeeze(
