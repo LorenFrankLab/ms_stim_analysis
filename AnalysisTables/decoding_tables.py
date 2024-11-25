@@ -2,8 +2,10 @@ import datajoint as dj
 import pandas as pd
 import numpy as np
 
+from .place_fields import TrackCellCoverage
+
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
-from spyglass.common import AnalysisNwbfile
+from spyglass.common import AnalysisNwbfile, interval_list_intersect
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.utils import SpyglassMixin
@@ -14,52 +16,52 @@ from spyglass.lfp.analysis.v1 import LFPBandV1
 schema = dj.schema("ms_decoding")
 
 
-@schema
-class ClusterlessDecodingFigurl1D(SpyglassMixin, dj.Computed):
-    definition = """
-    -> ClusterlessDecodingV1
-    ---
-    figurl: varchar(3000)
-    """
+# @schema
+# class ClusterlessDecodingFigurl_1D(SpyglassMixin, dj.Computed):
+#     definition = """
+#     -> ClusterlessDecodingV1
+#     ---
+#     figurl: varchar(3000)
+#     """
 
-    def make(self, key):
-        position_info = ClusterlessDecodingV1.fetch_linear_position_info(key)
-        decoding_results = (ClusterlessDecodingV1 & key).fetch_results()
-        results_time = decoding_results.acausal_posterior.isel(intervals=0).time.values
-        position_info = position_info.loc[results_time[0] : results_time[-1]]
-        spikes, _ = ClusterlessDecodingV1.fetch_spike_data(key)
-        figurl = create_interactive_1D_decoding_figurl(
-            position=position_info["linear_position"],
-            speed=position_info["speed"],
-            spike_times=spikes,
-            results=decoding_results.squeeze(),
-        )
-        key["figurl"] = figurl
-        self.insert1(key)
+#     def make(self, key):
+#         position_info = ClusterlessDecodingV1.fetch_linear_position_info(key)
+#         decoding_results = (ClusterlessDecodingV1 & key).fetch_results()
+#         results_time = decoding_results.acausal_posterior.isel(intervals=0).time.values
+#         position_info = position_info.loc[results_time[0] : results_time[-1]]
+#         spikes, _ = ClusterlessDecodingV1.fetch_spike_data(key)
+#         figurl = create_interactive_1D_decoding_figurl(
+#             position=position_info["linear_position"],
+#             speed=position_info["speed"],
+#             spike_times=spikes,
+#             results=decoding_results.squeeze(),
+#         )
+#         key["figurl"] = figurl
+#         self.insert1(key)
 
 
-@schema
-class SortedSpikesDecodingFigurl1D(SpyglassMixin, dj.Computed):
-    definition = """
-    -> SortedSpikesDecodingV1
-    ---
-    figurl: varchar(3000)
-    """
+# @schema
+# class SortedSpikesDecodingFigurl_1D(SpyglassMixin, dj.Computed):
+#     definition = """
+#     -> SortedSpikesDecodingV1
+#     ---
+#     figurl: varchar(3000)
+#     """
 
-    def make(self, key):
-        position_info = SortedSpikesDecodingV1.fetch_linear_position_info(key)
-        decoding_results = (SortedSpikesDecodingV1 & key).fetch_results()
-        results_time = decoding_results.acausal_posterior.isel(intervals=0).time.values
-        position_info = position_info.loc[results_time[0] : results_time[-1]]
-        spikes = SortedSpikesDecodingV1.fetch_spike_data(key)
-        figurl = create_interactive_1D_decoding_figurl(
-            position=position_info["linear_position"],
-            speed=position_info["speed"],
-            spike_times=spikes,
-            results=decoding_results.squeeze(),
-        )
-        key["figurl"] = figurl
-        self.insert1(key)
+#     def make(self, key):
+#         position_info = SortedSpikesDecodingV1.fetch_linear_position_info(key)
+#         decoding_results = (SortedSpikesDecodingV1 & key).fetch_results()
+#         results_time = decoding_results.acausal_posterior.isel(intervals=0).time.values
+#         position_info = position_info.loc[results_time[0] : results_time[-1]]
+#         spikes = SortedSpikesDecodingV1.fetch_spike_data(key)
+#         figurl = create_interactive_1D_decoding_figurl(
+#             position=position_info["linear_position"],
+#             speed=position_info["speed"],
+#             spike_times=spikes,
+#             results=decoding_results.squeeze(),
+#         )
+#         key["figurl"] = figurl
+#         self.insert1(key)
 
 
 @schema
@@ -207,13 +209,61 @@ class RippleClusterlessDecodeAnalysis(SpyglassMixin, dj.Computed):
             "Continuous",
             "Fragmented",
         ],
+        valid_intervals=None,
+        valid_interval_fraction=1.0,
     ):
+        """Classify ripples based on decoding results
+
+        Args:
+            key (dict, optional): Restriction of results to analysze. Defaults to {}.
+            thresh_percent (float, optional): percent threshold for a time to be defined as a given state. Defaults to 0.8.
+            thresh_ripple_fraction (float, optional): fraction of a ripple that must be a defined state to categorize the ripple. Defaults to 0.5.
+            locality_threshold (int, optional): ripples with a mean decode distance less than this classified as local. Defaults to 40.
+            class_names (list, optional): names of the state variables. Defaults to [ "Continuous", "Fragmented", ].
+            valid_intervals (np.ndarray, optional): interval list to restrict ripple analysis to. Defaults to None.
+            valid_interval_fraction (float, optional): fraction of the interval that must be in the valid intervals to be included in the analysis. Defaults to 1.0.
+
+        Returns:
+            _type_: _description_
+        """
         data_df = (self & key).fetch_dataframe()
         state_decode = data_df.state_posterior.values
         distance = data_df.distance.values
+        ripple_intervals = data_df.interval.values
+        ripple_intervals = np.array([r for r in ripple_intervals])
+        if valid_intervals is not None:
+            # computational efficiency for large number of ripples and intervals
+            inter_range_start_list = (
+                np.digitize(ripple_intervals[:, 0], valid_intervals[:, 0]) - 1
+            )
+            inter_range_start_list[inter_range_start_list < 0] = 0
+            inter_range_end_list = (
+                np.digitize(ripple_intervals[:, 1], valid_intervals[:, 1]) + 1
+            )
 
         ripple_class = []
-        for interval_distance, interval_posterior in zip(distance, state_decode):
+
+        for i, (interval, interval_distance, interval_posterior) in enumerate(
+            zip(ripple_intervals, distance, state_decode)
+        ):
+            if valid_intervals is not None:
+                # int_s = min(0, np.digitize(interval[0], valid_intervals[:, 0]) - 1)
+                # int_e = np.digitize(interval[1], valid_intervals[:, 1]) + 1
+                int_s = inter_range_start_list[i]
+                int_e = inter_range_end_list[i]
+                ripple_valid = interval_list_intersect(
+                    np.array([interval]), valid_intervals[int_s:int_e]
+                )
+                ripple_length = interval[1] - interval[0]
+                valid_length = (
+                    np.sum(np.diff(ripple_valid, axis=1).squeeze())
+                    if len(ripple_valid) > 0
+                    else 0
+                )
+                if valid_length / ripple_length < valid_interval_fraction:
+                    ripple_class.append("Invalid")
+                    continue
+
             if np.all(np.isnan(interval_posterior)):
                 ripple_class.append("NAN")
                 continue
@@ -230,3 +280,20 @@ class RippleClusterlessDecodeAnalysis(SpyglassMixin, dj.Computed):
                 ripple_class.append("Mixed")
 
         return np.array(ripple_class)
+
+
+@schema
+class BadDecodes(dj.Computed):
+    definition = """
+    -> ClusterlessDecodingV1
+    ---
+    bad_decodes: bool
+    """
+
+    def make(self, key):
+        result = (ClusterlessDecodingV1 & key).fetch_results()
+        if np.mean(np.isnan(result.acausal_posterior.values)) > 0.5:
+            key["bad_decodes"] = True
+        else:
+            key["bad_decodes"] = False
+        self.insert1(key)
