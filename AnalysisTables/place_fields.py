@@ -17,6 +17,7 @@ from spyglass.common import (
 import xarray as xr
 
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
+from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.utils.dj_mixin import SpyglassMixin, SpyglassMixinPart
 
 schema = dj.schema("ms_place_fields")
@@ -242,13 +243,13 @@ class PlaceFieldCoverage(SpyglassMixin, dj.Computed):
         spike_df = (OptoPlaceField() & key).fetch_dataframe()
         fields = spike_df.place_field.values
         # fields[np.isnan(fields)] = 0
-        bad_fields=[]
+        bad_fields = []
         for i, field in enumerate(fields):
             fields[i][np.isnan(field)] = 0
             if fields[i].sum() == 0:
                 bad_fields.append(i)
                 fields[i][0] = 1
-        fields = np.array([f / max(np.sum(f),1e-8) for f in fields])
+        fields = np.array([f / max(np.sum(f), 1e-8) for f in fields])
 
         # calculate the coverage
         fields_xr = xr.DataArray(
@@ -431,3 +432,54 @@ class TrackCellCoverage(SpyglassMixin, dj.Computed):
             .fetch("nwb_file_name", "interval_list_name", as_dict=True)
         )
         return (IntervalList & interval_key).fetch1("valid_times")
+
+    def fetch1_dataframe(self) -> pd.DataFrame:
+        assert len(nwb := self.fetch_nwb()) == 1
+        return nwb[0]["coverage"]
+
+
+@schema
+class DecodesToCoveredTrackSelection(SpyglassMixin, dj.Manual):
+    definition = """
+    -> ClusterlessDecodingV1
+    -> TrackCellCoverage
+    ---
+    """
+
+
+@schema
+class DecodesToCoveredTrack(SpyglassMixin, dj.Computed):
+    # Defines whether the decoded positions maps to a track location with sufficient
+    # place field coverage at each timepoint
+
+    definition = """
+    -> DecodesToCoveredTrackSelection
+    ---
+    -> AnalysisNwbfile
+    object_id: varchar(255)
+    """
+
+    def make(self, key):
+        # get track coverage data
+        track_df = (TrackCellCoverage() & key).fetch1_dataframe()
+        # get clusterless decoding results
+        results = (ClusterlessDecodingV1() & key).fetch_results()
+        full_posterior = results.causal_posterior.unstack("state_bins")
+        posterior = full_posterior.sum("state")[0]
+        decode_pos_bin = np.argmax(np.array(posterior), axis=1)
+        # map decoded positions to track coverage
+        decode_to_covered = track_df.loc[decode_pos_bin].good_coverage.values
+
+        # save the results
+        df = pd.DataFrame({"decode_to_covered": decode_to_covered})
+        analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
+        key["analysis_file_name"] = analysis_file_name
+        key["object_id"] = AnalysisNwbfile().add_nwb_object(
+            analysis_file_name, df, "decode_to_covered_track"
+        )
+        AnalysisNwbfile().add(key["nwb_file_name"], key["analysis_file_name"])
+        self.insert1(key)
+
+    def fetch1_dataframe(self) -> pd.DataFrame:
+        assert len(nwb := self.fetch_nwb()) == 1
+        return nwb[0]["decode_to_covered"]
