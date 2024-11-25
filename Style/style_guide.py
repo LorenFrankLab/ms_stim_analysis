@@ -62,6 +62,18 @@ animal_style = [
         "alias": "Rat I",
         "background": transfection_style["control"],
     },
+    {
+        "name": "transfected",
+        "color": transfection_style["transfected"],
+        "alias": "transfected",
+        "background": transfection_style["transfected"],
+    },
+    {
+        "name": "control",
+        "color": transfection_style["control"],
+        "alias": "control",
+        "background": transfection_style["control"],
+    },
 ]
 animal_style = pd.DataFrame(animal_style)
 animal_style.set_index("name", inplace=True)
