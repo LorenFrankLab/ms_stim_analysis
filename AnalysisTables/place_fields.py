@@ -1,4 +1,6 @@
 import os
+import random
+import string
 
 import datajoint as dj
 from non_local_detector.analysis import (
@@ -10,7 +12,6 @@ import pandas as pd
 from spyglass.common import (
     AnalysisNwbfile,
     IntervalList,
-    Session,
     interval_list_contains,
 )
 import xarray as xr
@@ -240,7 +241,14 @@ class PlaceFieldCoverage(SpyglassMixin, dj.Computed):
         # fetch the place fields
         spike_df = (OptoPlaceField() & key).fetch_dataframe()
         fields = spike_df.place_field.values
-        fields = np.array([f / np.sum(f) for f in fields])
+        # fields[np.isnan(fields)] = 0
+        bad_fields=[]
+        for i, field in enumerate(fields):
+            fields[i][np.isnan(field)] = 0
+            if fields[i].sum() == 0:
+                bad_fields.append(i)
+                fields[i][0] = 1
+        fields = np.array([f / max(np.sum(f),1e-8) for f in fields])
 
         # calculate the coverage
         fields_xr = xr.DataArray(
@@ -249,7 +257,7 @@ class PlaceFieldCoverage(SpyglassMixin, dj.Computed):
         )
         thresholds = get_highest_posterior_threshold(fields_xr, threshold)
         coverage = get_HPD_spatial_coverage(fields_xr, thresholds)
-
+        coverage[bad_fields] = 1e9
         # save the results
         coverage_df = pd.DataFrame(
             {
@@ -272,18 +280,154 @@ class PlaceFieldCoverage(SpyglassMixin, dj.Computed):
 
 
 @schema
-class TrackCellCoverageParams(dj.Manual):
+class TrackCellCoverageParams(SpyglassMixin, dj.Manual):
     definition = """
-    unit_coverage_params_name: varchar(64)
+    track_coverage_params_name: varchar(64)
     ---
-    spatial_coverage_threshold: float # threshold for the percentile coverage of the unit
-    coverage_width_threshold: float #threshold for the width of the unit's coverage (in bins)
+    place_field_coverage_specificity: float # how localized a unit's firing distribution must be for it to be considered a place cell, unit = bins
+    place_field_percentile_valid: float # What percent of a unit's distribution counts as track coverage
+    min_unit_coverage: int # minimum number of units that must be active at a position for it to be considered covered
+    condition: enum('control', 'test', 'stimulus') # which condition to use for the track coverage
     """
 
     def insert_default(self):
         key = {
-            "unit_coverage_params_name": "default",
-            "spatial_coverage_threshold": 0.95,
-            "coverage_width_threshold": 75,
+            "track_coverage_params_name": "default",
+            "place_field_coverage_specificity": 50,
+            "place_field_percentile_valid": 0.5,
+            "min_unit_coverage": 2,
+            "condition": "test",
         }
         self.insert1(key, skip_duplicates=True)
+
+
+@schema
+class TrackCellCoverageSelection(SpyglassMixin, dj.Manual):
+    definition = """
+    -> PlaceFieldCoverage
+    -> TrackCellCoverageParams
+    ---
+    """
+
+
+@schema
+class TrackCellCoverage(SpyglassMixin, dj.Computed):
+    definition = """
+    -> TrackCellCoverageSelection
+    ---
+    -> AnalysisNwbfile
+    -> IntervalList.proj(coverage_interval_name="interval_list_name")
+    coverage_object_id: varchar(255)
+    """
+
+    def make(self, key):
+        # parameters
+        # pf_coverage_specificity = 50
+        # pf_percentile_valid = 0.5
+        # min_unit_coverage = 2
+        # condition = "test"
+        pf_coverage_specificity, pf_percentile_valid, min_unit_coverage, condition = (
+            TrackCellCoverageParams & key
+        ).fetch1(
+            "place_field_coverage_specificity",
+            "place_field_percentile_valid",
+            "min_unit_coverage",
+            "condition",
+        )
+
+        # load the place fields and coverage specificity info
+        pfc_df = (PlaceFieldCoverage & key).fetch_dataframe()
+        pf_df = (OptoPlaceField & key).fetch_dataframe()
+        pf_df = pd.merge(pf_df, pfc_df, on=["unit_id", "condition"])
+        # select the place fields that are specific enough
+        pf_df = pf_df[pf_df["coverage"] < pf_coverage_specificity]
+        # select the place fields for the condition
+        cond_df = pf_df[pf_df["condition"] == condition]
+        fields = cond_df.place_field.values
+        fields = np.array([f / np.sum(f) for f in fields])
+
+        # calculate the positions covered by these good place fields
+        fields_xr = xr.DataArray(
+            fields,
+            dims=["unit", "position"],
+        )
+        thresholds = get_highest_posterior_threshold(fields_xr, pf_percentile_valid)
+        valid_coverage = np.array([f > thresh for f, thresh in zip(fields, thresholds)])
+        # get the total coverage at each position and threshold
+        position_coverage = valid_coverage.sum(axis=0)
+        covered_positions = np.where(position_coverage >= min_unit_coverage)[0]
+        # load the linearized position data
+        decoding_entry = (
+            SortedDecodingGroup().TestEncoding  # same pos group for all parts tables
+            & (OptoPlaceField() & key)
+        )
+        decoding_table = SortedSpikesDecodingV1() & decoding_entry
+        decoding_key = decoding_table.fetch1("KEY")
+        pos_df = decoding_table.fetch_linear_position_info(decoding_key)
+        # assign each position timepoint to a a bin on the track
+        results = decoding_table.fetch_results()
+        position_bins = results.position.values
+        pos_bin_ind = np.argmin(
+            np.abs(np.subtract.outer(pos_df.linear_position.to_numpy(), position_bins)),
+            axis=1,
+        )
+        # determine if each timepoint happens in a covered position
+        covered_time_ind = np.array(
+            [x in covered_positions for x in pos_bin_ind]
+        ).astype(int)
+        # make an interval list of the covered timepoints
+        covered_start = np.where(np.diff(covered_time_ind) == 1)[0]
+        if covered_time_ind[0] == 1:
+            covered_start = np.concatenate([[0], covered_start])
+        covered_stop = np.where(np.diff(covered_time_ind) == -1)[0]
+        if covered_time_ind[-1] == 1:
+            covered_stop = np.concatenate([covered_stop, [len(covered_time_ind) - 1]])
+        assert len(covered_start) == len(covered_stop)
+        covered_intervals = np.array(
+            [
+                pos_df.iloc[covered_start].index.to_numpy(),
+                pos_df.iloc[covered_stop].index.to_numpy(),
+            ]
+        ).T
+
+        # save the results
+        id = "".join(random.choices(string.ascii_uppercase + string.digits, k=10))
+        interval_list_key = {
+            "nwb_file_name": key["nwb_file_name"],
+            "interval_list_name": f"{key['decode_group_name']}_track_cell_coverage_{id}",
+            "valid_times": covered_intervals,
+            "pipeline": self.full_table_name,
+        }
+        IntervalList().insert1(interval_list_key)
+        key["coverage_interval_name"] = interval_list_key["interval_list_name"]
+
+        track_df = pd.DataFrame(
+            {
+                "unit_coverage": position_coverage,
+                "good_coverage": position_coverage >= min_unit_coverage,
+            }
+        )
+        analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
+        key["analysis_file_name"] = analysis_file_name
+        key["coverage_object_id"] = AnalysisNwbfile().add_nwb_object(
+            key["analysis_file_name"], track_df, "track_cell_coverage"
+        )
+        AnalysisNwbfile().add(key["nwb_file_name"], key["analysis_file_name"])
+        self.insert1(key)
+
+    def fetch_good_coverage_times(self, key={}):
+        """fetch times when the animal is on a section of track that is covered by a
+        sufficient number of place fields
+
+        Args:
+            key (dict, optional): restriction on the table. Defaults to {}.
+
+        Returns:
+            np.ndarray: Nx2 array of start and stop times of the covered intervals
+        """
+        interval_key = (
+            (self & key)
+            .proj(interval_list_name="coverage_interval_name")
+            .fetch("nwb_file_name", "interval_list_name", as_dict=True)
+        )
+        return (IntervalList & interval_key).fetch1("valid_times")
