@@ -283,6 +283,111 @@ class RippleClusterlessDecodeAnalysis(SpyglassMixin, dj.Computed):
 
 
 @schema
+class ContinuousRippleTraversalParams(SpyglassMixin, dj.Manual):
+    definition = """
+    ripple_traversal_params_name: varchar(128)
+    ---
+    continuous_distance_threshold: float
+    acausal: bool
+    """
+
+
+@schema
+class ContinuousRippleTraversalSelection(SpyglassMixin, dj.Manual):
+    definition = """
+    # Selection of ripples for continuous traversal analysis
+    -> RippleTimesV1
+    -> ClusterlessDecodingV1
+    -> ContinuousRippleTraversalParams
+    """
+
+
+@schema
+class ContinuousRippleTraversal(SpyglassMixin, dj.Computed):
+    definition = """
+    # Continuous traversal analysis of ripples
+    # Calculates the maximum amount of track spanned by a continupus traversal
+    # of the decoded position per ripple
+    -> ContinuousRippleTraversalSelection
+    ---
+    -> AnalysisNwbfile
+    data_object_id: varchar(128)
+    """
+
+    def make(self, key):
+        # get data
+        ripple_df = (RippleTimesV1 & key).fetch1_dataframe()
+        results = (ClusterlessDecodingV1() & key).fetch_results()
+        params = (ContinuousRippleTraversalParams & key).fetch1()
+        acausal = params["acausal"]
+        continuous_distance_threshold = params["continuous_distance_threshold"]
+        if acausal:
+            full_posterior = results.acausal_posterior.unstack("state_bins")
+        else:
+            full_posterior = results.causal_posterior.unstack("state_bins")
+        posterior = full_posterior.sum("state")[0]
+        decode_pos = posterior.idxmax("position").values  # decode position in cm
+        environment = ClusterlessDecodingV1().fetch_environments(key)[0]
+        distance_dict = environment.distance_between_nodes_
+
+        all_traversals = []
+        all_longest_traversals = []
+        for i, (st, en) in enumerate(zip(ripple_df.start_time, ripple_df.end_time)):
+            # plt.axvspan(st, en, color="red", alpha=0.5)
+
+            ind_st, ind_end = np.digitize([st, en], results.time)
+            decode_pos_ripple = np.argmax(posterior[ind_st:ind_end].values, axis=1)
+            distances = np.array(
+                [
+                    distance_dict[x][y]
+                    for x, y in zip(decode_pos_ripple[:-1], decode_pos_ripple[1:])
+                ]
+            )
+            continuous_decode = distances < continuous_distance_threshold
+            total_valid_traversal = np.sum(continuous_decode * distances)
+            total_valid_traversal
+            all_traversals.append(total_valid_traversal)
+
+            continuous_decode_switch = np.concatenate(
+                [np.ones(1), np.diff(continuous_decode.astype(int))]
+            )
+            cont_st_list = np.where(continuous_decode_switch == 1)[0]
+            cont_en_list = np.where(continuous_decode_switch == -1)[0]
+            if len(cont_st_list) > len(cont_en_list):
+                cont_en_list = np.concatenate([cont_en_list, [len(continuous_decode)]])
+            continuous_valid_traversal = []
+            for c_st, c_en in zip(cont_st_list, cont_en_list):
+                # continuous_valid_traversal.append(np.sum(distances[c_st:c_en]*continuous_decode[c_st:c_en]))
+                continuous_valid_traversal.append(
+                    np.unique(decode_pos_ripple[c_st:c_en]).size
+                )
+            longest_traversal = np.max(continuous_valid_traversal)
+            all_longest_traversals.append(longest_traversal)
+
+        data = pd.DataFrame(dict(
+            start_time=ripple_df.start_time,
+            end_time=ripple_df.end_time,
+            total_traversal=all_traversals,
+            longest_traversal=all_longest_traversals,)
+        )
+        analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
+        key["analysis_file_name"] = analysis_file_name
+        key["data_object_id"] = AnalysisNwbfile().add_nwb_object(
+            key["analysis_file_name"], data, "continuous_traversal"
+        )
+        AnalysisNwbfile().add(key["nwb_file_name"], key["analysis_file_name"])
+        self.insert1(key)
+
+    def fetch1_dataframe(self) -> pd.DataFrame:
+        if not len(nwb := self.fetch_nwb()) == 1:
+            raise ValueError("fetch1_dataframe must be called on a single key")
+        return nwb[0]["data"]
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        return pd.concat([nwb["data"] for nwb in self.fetch_nwb()])
+
+
+@schema
 class BadDecodes(dj.Computed):
     definition = """
     -> ClusterlessDecodingV1
