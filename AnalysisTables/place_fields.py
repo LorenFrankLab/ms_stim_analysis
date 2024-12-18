@@ -471,7 +471,9 @@ class DecodesToCoveredTrack(SpyglassMixin, dj.Computed):
         decode_to_covered = track_df.loc[decode_pos_bin].good_coverage.values
 
         # save the results
-        df = pd.DataFrame({"decode_to_covered": decode_to_covered})
+        df = pd.DataFrame(
+            {"decode_to_covered": decode_to_covered, "time": results.time}
+        )
         analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
         key["analysis_file_name"] = analysis_file_name
         key["object_id"] = AnalysisNwbfile().add_nwb_object(
@@ -482,4 +484,22 @@ class DecodesToCoveredTrack(SpyglassMixin, dj.Computed):
 
     def fetch1_dataframe(self) -> pd.DataFrame:
         assert len(nwb := self.fetch_nwb()) == 1
-        return nwb[0]["decode_to_covered"]
+        return nwb[0]["object_id"]
+
+    def fetch_intervals(self, key={}):
+        df = (self & key).fetch1_dataframe()
+        good = df.values.astype(int)[:, 0]
+        change = np.diff(good, axis=0)
+
+        start = np.where(change == 1)[0]
+        end = np.where(change == -1)[0]
+        if good[0] == 1:
+            start = np.concatenate([[0], start])
+        if good[-1] == 1:
+            end = np.concatenate([end, [good.shape[0] - 1]])
+
+        time = df.time.values
+        intervals = []
+        for s, e in zip(start, end):
+            intervals.append([time[s], time[e]])
+        return np.array(intervals)
