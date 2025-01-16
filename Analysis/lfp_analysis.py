@@ -9,6 +9,13 @@ import os
 from scipy import signal
 from tqdm import tqdm
 import pywt
+import logging
+
+logger = logging.getLogger("example_logger")
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler("/home/sambray/Desktop/wtrack_lfp.log")
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 import spyglass.common as sgc
 from spyglass.common import (
@@ -82,6 +89,9 @@ def get_yaml_defined_reference_electrode(key: dict) -> int:
     electrode_group_name = (ElectrodeGroup & key & {"description": "reference"}).fetch(
         "electrode_group_name"
     )[0]
+    logger.info(f"key: {key}")
+    logger.info(f"electrode_group_name: {electrode_group_name}")
+    logger.info("     ")
     e_group_name_list = (
         LFPV1 & key & {"electrode_group_name": electrode_group_name}
     ).fetch("lfp_electrode_group_name")
@@ -246,24 +256,9 @@ def get_control_test_power_spectrum(
             np.array(run_intervals), np.array(valid_position_intervals)
         )
 
-    # # determine if each interval is in the optogenetic control interval
-    control_interval = (OptoStimProtocol() & key).fetch1("control_intervals")
-    test_interval = (OptoStimProtocol() & key).fetch1("test_intervals")
-    if len(control_interval) == 0 or len(test_interval) == 0:
-        print(f"Warning: no optogenetic intervals found for {key}")
-        return (
-            [],
-            [],
-            [],
-            [],
-            [],
-        )
-    optogenetic_run_interval = interval_list_intersect(
-        np.array(run_intervals), np.array(test_interval)
-    )
-    control_run_interval = interval_list_intersect(
-        np.array(run_intervals), np.array(control_interval)
-    )
+    from .utils import get_running_valid_intervals
+
+    optogenetic_run_interval, control_run_interval = get_running_valid_intervals(key)
 
     # Begin analysis
     basic_key = {
@@ -747,7 +742,7 @@ def opto_spectrum_analysis(
         control_power_spectrum[animal].extend(control_)
         control_weight[animal].extend(control_w_)
         opto_weight[animal].extend(opto_w_)
-    # normalize each animal by peak of weighted median
+    # normalize each animal by peak of control condition weighted median
     control_power_spectrum_combined = []
     opto_power_spectrum_combined = []
     opto_weight_combined = []
@@ -2018,6 +2013,7 @@ def lfp_power_dynamics_pulse_hilbert(
     fig=None,
     color="cornflowerblue",
     return_data=False,
+    norm_window=None,
 ):
     """Generates a figure characterizing the lfp around each stimulus cycle
 
@@ -2098,6 +2094,12 @@ def lfp_power_dynamics_pulse_hilbert(
     if fig is None:
         fig = plt.figure()
     power_curves = np.array(power_curves)
+    if norm_window is not None:
+        ind_norm = np.where((tp > norm_window[0]) & (tp < norm_window[1]))[0]
+        power_curves = (
+            power_curves / np.nanmean(power_curves[:, ind_norm], axis=1)[:, None]
+        )
+
     print(power_curves.shape)
     plt.plot(tp, np.median(power_curves, axis=0), color=color)
     plt.fill_between(
@@ -2366,10 +2368,14 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
         # get analytic band power
         if marks == "first_pulse":
             t0_list = OptoStimProtocol().get_cylcle_begin_timepoints(stim_key)
-        elif marks in ["position_test", "position_control"]:
+        elif marks in [
+            "position_test",
+            "position_control",
+            "first_pulse_position_restricted",
+        ]:
             # get t0 from filtered port interval
             valid_intervals = np.array(filter_position_ports(stim_key, buffer=20))
-            if marks == "position_test":
+            if marks in ["position_test", "first_pulse_position_restricted"]:
                 restrict_intervals = (OptoStimProtocol & stim_key).fetch1(
                     "test_intervals"
                 )
@@ -2390,6 +2396,12 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
             raise ValueError(
                 "marks must be 'first_pulse', 'position_test' or 'position_control'"
             )
+
+        if marks == "first_pulse_position_restricted":
+            stim_list = OptoStimProtocol().get_cylcle_begin_timepoints(stim_key)
+            t0_list = [
+                s for s in stim_list if np.min(np.abs(s - np.array(t0_list))) < 0.3
+            ]
 
         for t0 in tqdm(t0_list):
             ind = np.digitize(t0, lfp_timestamps)
@@ -2438,7 +2450,7 @@ def lfp_power_dynamics_pulse_cwt_spectrogram(
                 method="fft",
             )
             for i, f in enumerate(frequencies):
-                width = fs / f / 2
+                width = fs / f  # / 2
                 C[i, :] = np.convolve(
                     np.abs(C[i, :]), np.ones(int(width)) / width, mode="same"
                 )
