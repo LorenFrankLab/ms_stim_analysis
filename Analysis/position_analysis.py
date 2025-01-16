@@ -298,6 +298,8 @@ def filter_position_ports(key: dict, **kwargs) -> list:
     list
         list of time intervals when rat is not at the ports
     """
+    if key.get("epoch", -1) is None:
+        key.pop("epoch")
     task = ((TaskIdentification * EpochIntervalListName) & key).fetch1("contingency")
     if task in ["lineartrack", "Lineartrack"]:
         return lineartrack_position_filter(key, **kwargs)
