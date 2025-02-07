@@ -795,13 +795,15 @@ def opto_spectrum_analysis(
             for i in range(control_power_spectrum.shape[1])
         ]
     )
+    n_control = len(control_power_spectrum)
+    n_opto = len(opto_power_spectrum)
     c = interval_style["control"]
-    ax[0].plot(f, control_stats[:, 0], c=c, label="stim protocol OFF")
+    ax[0].plot(f, control_stats[:, 0], c=c, label=f"stim protocol OFF, n={n_control}")
     ax[0].fill_between(
         f, control_stats[:, 1], control_stats[:, 2], alpha=0.4, facecolor=c
     )
     c = interval_style["test"]
-    ax[0].plot(f, opto_stats[:, 0], c=c, label="stim protocol ON")
+    ax[0].plot(f, opto_stats[:, 0], c=c, label=f"stim protocol ON, n={n_opto}")
     ax[0].fill_between(f, opto_stats[:, 1], opto_stats[:, 2], alpha=0.4, facecolor=c)
     ax[0].set_xlim(0, 35)
     ax[0].set_xlabel("frequencies")
@@ -1543,6 +1545,7 @@ def lfp_per_pulse_analysis(
     peak_rng = np.where((lfp_time_seg * 1000 > -125) & (lfp_time_seg * 1000 < 125))[0]
     # avg_trace
     PLOT_SCALING_FACTOR = 5
+    n = [len(lfp_traces[i]) for i in range(len(pulse_number_list))]
     arr = [
         np.nanmedian(np.array(lfp_traces[i]), axis=0) / PLOT_SCALING_FACTOR
         for i in range(len(pulse_number_list))
@@ -1555,6 +1558,7 @@ def lfp_per_pulse_analysis(
         np.nanpercentile(np.array(lfp_traces[i]), 75, axis=0) / PLOT_SCALING_FACTOR
         for i in range(len(pulse_number_list))
     ]
+
     # peak_amplitudes = [np.max(np.squeeze(np.array(lfp_traces[i])[:,peak_rng]),axis=1) for i in pulse_number_list]
     peak_amplitudes = [
         np.nanpercentile(
@@ -1565,7 +1569,14 @@ def lfp_per_pulse_analysis(
     # peak_amplitudes = [x / np.median(lfp_power[0]) for x in lfp_power]
 
     for loc, i in enumerate(pulse_number_list):
-        ax[0].plot(lfp_time_seg * 1000, arr[loc] - loc, c=color, alpha=0.9, lw=1)
+        ax[0].plot(
+            lfp_time_seg * 1000,
+            arr[loc] - loc,
+            c=color,
+            alpha=0.9,
+            lw=1,
+            label="n trials = " + str(n[i]),
+        )
         ax[0].fill_between(
             lfp_time_seg * 1000,
             np.squeeze(lo[loc]) - loc,
