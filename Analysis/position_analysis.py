@@ -70,6 +70,9 @@ def get_running_intervals(
             "interval_list_name"
         )
     key.update({"interval_list_name": interval_list_name})
+    if filter_speed == 0:
+        return (IntervalList & key).fetch1("valid_times")
+
     if dlc_pos:
         if epoch is None:
             map_key = {
