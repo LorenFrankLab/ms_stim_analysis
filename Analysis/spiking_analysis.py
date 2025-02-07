@@ -1,77 +1,72 @@
+import os
+import sys
 from typing import Tuple
+
+import matplotlib as mpl
+import matplotlib.cm as cm
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pandas as pd
-import matplotlib.pyplot as plt
-
-import matplotlib.gridspec as gridspec
-import matplotlib.cm as cm
-import matplotlib as mpl
-import os
-from scipy import signal
-from tqdm import tqdm
-
 import spyglass.common as sgc
+from scipy import signal
 from spyglass.common import (
-    Session,
+    LFP,
+    Electrode,
+    ElectrodeGroup,
     IntervalList,
     LabMember,
     LabTeam,
-    Raw,
-    Session,
-    Nwbfile,
-    TaskEpoch,
-    Electrode,
-    ElectrodeGroup,
-    LFP,
-    LFPSelection,
     LFPBand,
     LFPBandSelection,
-    get_electrode_indices,
-    convert_epoch_interval_name_to_position_interval_name,
+    LFPSelection,
+    Nwbfile,
     PositionIntervalMap,
+    Raw,
+    Session,
+    TaskEpoch,
+    convert_epoch_interval_name_to_position_interval_name,
+    get_electrode_indices,
     interval_list_contains,
 )
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.position.v1 import TrodesPosV1
-from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
-from .position_analysis import get_running_intervals, filter_position_ports
-from .utils import convert_delta_marks_to_timestamp_values, smooth
+from tqdm import tqdm
 
 from Time_and_trials.ms_interval import EpochIntervalListName
 
-
-import sys
+from .position_analysis import filter_position_ports, get_running_intervals
+from .utils import convert_delta_marks_to_timestamp_values, smooth
 
 sys.path.append("/home/sambray/Documents/MS_analysis_samsplaying/")
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import (
-    OptoStimProtocol,
-    OptoStimProtocolLaser,
-    OptoStimProtocolTransfected,
-    OptoStimProtocolClosedLoop,
-)
-from Analysis.utils import (
-    filter_animal,
-    weighted_quantile,
-    filter_task,
-    convert_delta_marks_to_timestamp_values,
-    filter_opto_data,
-)
+import scipy.signal
+from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
+from spyglass.spikesorting.v0 import CuratedSpikeSorting
+
 from Analysis.circular_shuffle import (
+    bootstrap,
+    discrete_KL_divergence,
     generate_alligned_binned_spike_func,
     shuffled_spiking_distribution,
-    discrete_KL_divergence,
-    bootstrap,
     stacked_marks_to_kl,
 )
-
 from Analysis.spiking_place_fields import decoding_place_fields
-
+from Analysis.utils import (
+    convert_delta_marks_to_timestamp_values,
+    filter_animal,
+    filter_opto_data,
+    filter_task,
+    weighted_quantile,
+)
+from ms_opto_stim_protocol import (
+    OptoStimProtocol,
+    OptoStimProtocolClosedLoop,
+    OptoStimProtocolLaser,
+    OptoStimProtocolTransfected,
+)
 from spiking_analysis_tables import BinnedSpiking
-from spyglass.spikesorting.v0 import CuratedSpikeSorting
-from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
-import scipy.signal
 
 
 ##################################################################################
@@ -87,18 +82,54 @@ def bin_spikes_around_marks(spikes, marks, bins):
 def opto_spiking_dynamics(
     dataset_key: dict,
     plot_rng: np.ndarray = np.arange(-0.08, 0.2, 0.002),
-    # first_pulse_only: bool = False,
     marks="first_pulse",
     return_data: bool = False,
+    limit_1_epoch: bool = False,
+    neuron_type: str = None,
 ):
+    """Function to plot the spiking dynamics around opto stimulations
+
+    Parameters
+    ----------
+    dataset_key : dict
+        restriction defining what data to analyze
+    plot_rng : np.ndarray, optional
+        time bins to analyze around the stim, by default np.arange(-0.08, 0.2, 0.002)
+    marks : str, optional
+        how to allign the data,. Valid options are first_pulse, all_pulses, theta_peaks, dummy_pulse=x, by default "first_pulse"
+    return_data : bool, optional
+        whether to return the , by default False
+    limit_1_epoch : bool, optional
+        if True only analysze the first matching epoch in the data, by default False
+    neuron_type : str, optional
+        if not None, only analyze putative neurons of this type as defined by firing rate, by default None
+
+    Returns
+    -------
+    fig
+        plotted figure
+    spike_counts
+        array of spike counts for each unit
+    tp
+        time points for the spike counts
+    KL
+        KL divergence for each unit
+    """
     # get the filtered data
     dataset = filter_opto_data(dataset_key)
+    nwb_file_name_list = dataset.fetch("nwb_file_name")
+    position_interval_name_list = dataset.fetch("interval_list_name")
+    if limit_1_epoch:
+        nwb_file_name_list = nwb_file_name_list[:1]
+        position_interval_name_list = position_interval_name_list[:1]
 
+    if len(plot_rng) < 3:
+        raise ValueError("plot_rng is the histogram bins for plotting")
     # compile the data
     spike_counts = []
     spike_counts_shuffled = []
     for nwb_file_name, position_interval_name in tqdm(
-        zip(dataset.fetch("nwb_file_name")[:3], dataset.fetch("interval_list_name")[:3])
+        zip(nwb_file_name_list, position_interval_name_list)
     ):
         interval_name = (
             (
@@ -121,6 +152,17 @@ def opto_spiking_dynamics(
             continue
         sorted_group_key = (SortedSpikesGroup() & basic_key).fetch1("KEY")
         spikes = SortedSpikesGroup().fetch_spike_data(sorted_group_key)
+        # filter based on overall firing rate
+        sort_interval = (
+            IntervalList
+            & {"nwb_file_name": nwb_file_name, "interval_list_name": interval_name}
+        ).fetch1("valid_times")
+        sort_time = np.sum([e[1] - e[0] for e in sort_interval])
+        rate = np.array([len(s) for s in spikes]) / sort_time
+        if neuron_type == "pyramidal":
+            spikes = [s for s, r in zip(spikes, rate) if r < 5]
+        elif neuron_type == "interneuron":
+            spikes = [s for s, r in zip(spikes, rate) if r > 5]
 
         pos_interval_name = convert_epoch_interval_name_to_position_interval_name(
             {"nwb_file_name": nwb_file_name, "interval_list_name": interval_name}
@@ -423,8 +465,10 @@ def opto_spiking_dynamics(
 
     # Table with information about the dataset
     the_table = ax[4].table(
-        cellText=[[len(dataset)], [marks]] + [[str(x)] for x in dataset_key.values()],
-        rowLabels=["number_epochs", "marks"] + [str(x) for x in dataset_key.keys()],
+        cellText=[[len(dataset)], [marks], [neuron_type]]
+        + [[str(x)] for x in dataset_key.values()],
+        rowLabels=["number_epochs", "marks", "neuron_type"]
+        + [str(x) for x in dataset_key.keys()],
         loc="right",
         colWidths=[0.6, 0.6],
     )
@@ -520,6 +564,7 @@ def opto_spiking_dynamics_place_dependence(
             SortedSpikesDecodingV1()
             & basic_key
             & {"encoding_interval": position_interval_name + "_opto_test_interval"}
+            & {"position_group_name": position_interval_name}
         ).fetch1("KEY")
         pos_df = SortedSpikesDecodingV1().fetch_linear_position_info(decode_key)
 
@@ -599,7 +644,7 @@ def opto_spiking_dynamics_place_dependence(
             raise ValueError(
                 "marks must be in [first_pulse, all_pulses, theta_peaks, dummy_cycle]"
             )
-
+        n_marks = len(pulse_timepoints)
         # get position info of pulse_timepoints
         pos_ind = np.digitize(pulse_timepoints, pos_df.index.values)
         pulse_pos = pos_df.linear_position.iloc[pos_ind].values
@@ -942,9 +987,10 @@ def opto_spiking_dynamics_place_dependence(
 
         # Table with information about the dataset
         the_table = ax[4].table(
-            cellText=[[len(dataset)], [marks]]
+            cellText=[[len(dataset)], [marks], [n_marks]]
             + [[str(x)] for x in dataset_key.values()],
-            rowLabels=["number_epochs", "marks"] + [str(x) for x in dataset_key.keys()],
+            rowLabels=["number_epochs", "marks", "total marks"]
+            + [str(x) for x in dataset_key.keys()],
             loc="right",
             colWidths=[0.6, 0.6],
         )
@@ -1369,7 +1415,9 @@ def get_spikecount_per_time_bin(spike_times, time):
     )
 
 
-def spatial_information_rate(spike_counts, occupancy):
+def spatial_information_rate(
+    spike_counts=None, occupancy=None, spike_rate=None, p_loc=None
+):
     """
     Calculates the spatial information rate of units firing
     Formula from:
@@ -1377,12 +1425,17 @@ def spatial_information_rate(spike_counts, occupancy):
     Is Dependent on the Autophosphorylation of the α-Isoform of the Calcium/Calmodulin-Dependent Protein Kinase II
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2680063/
     """
-
-    spike_rate = spike_counts / occupancy
-    p_loc = occupancy / occupancy.sum()
-    total_rate = spike_counts.sum() / occupancy.sum()
+    if spike_counts is not None and occupancy is not None:
+        spike_rate = spike_counts / occupancy
+        p_loc = occupancy / occupancy.sum()
+        total_rate = spike_counts.sum() / occupancy.sum()
+    elif spike_rate is not None and p_loc is not None:
+        total_rate = (spike_rate * p_loc).sum()
+    else:
+        raise ValueError(
+            "spike_counts and occupancy or spike_rate and p_loc must be provided"
+        )
     return np.nansum(p_loc * spike_rate / total_rate * np.log2(spike_rate / total_rate))
-
     """Calculates the spatial information rate of units firing
     Formula from:
     Experience-Dependent Increase in CA1 Place Cell Spatial Information, But Not Spatial Reproducibility,
@@ -1409,9 +1462,10 @@ def spatial_information_rate(spike_counts, occupancy):
 
 
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from Analysis.lfp_analysis import get_ref_electrode_index
-from spyglass.lfp.analysis.v1 import LFPBandV1
 from spyglass.common import interval_list_intersect
+from spyglass.lfp.analysis.v1 import LFPBandV1
+
+from Analysis.lfp_analysis import get_ref_electrode_index
 
 
 def get_theta_peaks(key):
