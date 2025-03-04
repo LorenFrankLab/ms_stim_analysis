@@ -2,6 +2,7 @@ import datajoint as dj
 import pandas as pd
 import numpy as np
 
+import non_local_detector.analysis as analysis
 from .place_fields import TrackCellCoverage
 
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
@@ -74,7 +75,41 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
     """
 
     def make(self, key):
-        distance = (ClusterlessDecodingV1() & key).get_ahead_behind_distance()
+        # Manually call with self-calculated orientation
+        query = ClusterlessDecodingV1 & key
+        classifier = query.fetch_model()
+        time_slice = slice(-np.inf, np.inf)
+        posterior = (
+            query.fetch_results()
+            .acausal_posterior.sel(time=time_slice)
+            .squeeze()
+            .unstack("state_bins")
+            .sum("state")
+        )
+
+        track_graph = classifier.environments[0].track_graph
+        linear_position_info = query.fetch_linear_position_info(query.fetch1("KEY"))
+        vel_x = linear_position_info["velocity_x"]
+        vel_y = linear_position_info["velocity_y"]
+        infer_orientation = np.arctan2(vel_x, vel_y)
+        traj_data = analysis.get_trajectory_data(
+            posterior=posterior,
+            track_graph=track_graph,
+            decoder=classifier,
+            actual_projected_position=linear_position_info[
+                ["projected_x_position", "projected_y_position"]
+            ],
+            track_segment_id=linear_position_info["track_segment_id"],
+            actual_orientation=infer_orientation,
+        )
+
+        distance = analysis.get_ahead_behind_distance(
+            classifier.environments[0].track_graph, *traj_data
+        )
+
+        # old way. errors because of orientation
+        # distance = (ClusterlessDecodingV1() & key).get_ahead_behind_distance()
+
         results = (ClusterlessDecodingV1() & key).fetch_results()
 
         df = pd.DataFrame({"time": results.time, "decode_distance": distance})
@@ -364,11 +399,13 @@ class ContinuousRippleTraversal(SpyglassMixin, dj.Computed):
             longest_traversal = np.max(continuous_valid_traversal)
             all_longest_traversals.append(longest_traversal)
 
-        data = pd.DataFrame(dict(
-            start_time=ripple_df.start_time,
-            end_time=ripple_df.end_time,
-            total_traversal=all_traversals,
-            longest_traversal=all_longest_traversals,)
+        data = pd.DataFrame(
+            dict(
+                start_time=ripple_df.start_time,
+                end_time=ripple_df.end_time,
+                total_traversal=all_traversals,
+                longest_traversal=all_longest_traversals,
+            )
         )
         analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
         key["analysis_file_name"] = analysis_file_name
