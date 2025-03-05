@@ -79,9 +79,9 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
         query = ClusterlessDecodingV1 & key
         classifier = query.fetch_model()
         time_slice = slice(-np.inf, np.inf)
+        results = (ClusterlessDecodingV1() & key).fetch_results()
         posterior = (
-            query.fetch_results()
-            .acausal_posterior.sel(time=time_slice)
+            results.acausal_posterior.sel(time=time_slice)
             .squeeze()
             .unstack("state_bins")
             .sum("state")
@@ -107,13 +107,7 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
             classifier.environments[0].track_graph, *traj_data
         )
 
-        # old way. errors because of orientation
-        # distance = (ClusterlessDecodingV1() & key).get_ahead_behind_distance()
-
-        results = (ClusterlessDecodingV1() & key).fetch_results()
-
         df = pd.DataFrame({"time": results.time, "decode_distance": distance})
-        df = df.set_index("time")
 
         analysis_file_name = AnalysisNwbfile().create(key["nwb_file_name"])
         key["analysis_file_name"] = analysis_file_name
@@ -127,7 +121,7 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
     def fetch1_dataframe(self) -> pd.DataFrame:
         if not len(nwb := self.fetch_nwb()):
             raise ValueError("fetch1_dataframe must be called on a single key")
-        return nwb[0]["distance"]
+        return nwb[0]["distance"].set_index("time")
 
 
 @schema
