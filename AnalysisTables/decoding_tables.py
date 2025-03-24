@@ -4,6 +4,10 @@ import numpy as np
 
 import non_local_detector.analysis as analysis
 from .place_fields import TrackCellCoverage
+import os
+
+os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
+from Analysis.utils import smooth
 
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
 from spyglass.common import AnalysisNwbfile, interval_list_intersect
@@ -13,6 +17,7 @@ from spyglass.utils import SpyglassMixin
 from spyglass.ripple.v1 import RippleTimesV1
 from spyglass.lfp.analysis.v1 import LFPBandV1
 
+os.environ["JAX_PLATFORMS"] = "cpu"
 
 schema = dj.schema("ms_decoding")
 
@@ -89,9 +94,16 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
 
         track_graph = classifier.environments[0].track_graph
         linear_position_info = query.fetch_linear_position_info(query.fetch1("KEY"))
-        vel_x = linear_position_info["velocity_x"]
-        vel_y = linear_position_info["velocity_y"]
-        infer_orientation = np.arctan2(vel_x, vel_y)
+        proj_vel_x = smooth(
+            np.append(0, np.diff(linear_position_info.projected_x_position.values)),
+            n=501,
+        )
+        proj_vel_y = smooth(
+            np.append(0, np.diff(linear_position_info.projected_y_position.values)),
+            n=501,
+        )
+        infer_orientation = np.arctan2(proj_vel_x, proj_vel_y)
+
         traj_data = analysis.get_trajectory_data(
             posterior=posterior,
             track_graph=track_graph,
@@ -103,7 +115,7 @@ class ClusterlessAheadBehindDistance(SpyglassMixin, dj.Computed):
             actual_orientation=infer_orientation,
         )
 
-        distance = analysis.get_ahead_behind_distance(
+        distance = -1 * analysis.get_ahead_behind_distance(
             classifier.environments[0].track_graph, *traj_data
         )
 

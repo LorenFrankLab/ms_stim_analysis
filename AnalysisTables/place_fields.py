@@ -3,7 +3,7 @@ import random
 import string
 
 import datajoint as dj
-from non_local_detector.analysis import (
+from non_local_detector.model_checking import (
     get_HPD_spatial_coverage,
     get_highest_posterior_threshold,
 )
@@ -196,7 +196,10 @@ class OptoPlaceField(SpyglassMixin, dj.Computed):
         )
 
     def fetch_dataframe(self) -> pd.DataFrame:
-        return pd.concat([data["place"] for data in self.fetch_nwb()])
+        data = [data["place"] for data in self.fetch_nwb()]
+        if len(data) > 1:
+            return pd.concat(data)
+        return data[0]
 
 
 @schema
