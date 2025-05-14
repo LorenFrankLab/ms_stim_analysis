@@ -251,8 +251,8 @@ def opto_spiking_dynamics(
 
         # get histogram spike counts
         for unit_spikes in spikes:
-            unit_spikes_restricted = interval_list_contains(
-                interval_restrict, unit_spikes
+            unit_spikes_restricted = np.unique(
+                interval_list_contains(interval_restrict, unit_spikes)
             )
             vals = bin_spikes_around_marks(
                 unit_spikes_restricted, pulse_timepoints, plot_rng
@@ -263,8 +263,8 @@ def opto_spiking_dynamics(
             #         vals, int(gauss_smooth / np.mean(np.diff(histogram_bins)))
             #     )
             # break
-            unit_spikes_restricted = interval_list_contains(
-                interval_restrict_shuffle, unit_spikes
+            unit_spikes_restricted = np.unique(
+                interval_list_contains(interval_restrict_shuffle, unit_spikes)
             )
 
             def alligned_binned_spike_func(marks):
@@ -290,17 +290,11 @@ def opto_spiking_dynamics(
         return
     spike_counts = np.array(spike_counts)  # shape = (units,bins)
     spike_counts_shuffled = np.array(
-        spike_counts_shuffled
-    )  # shape = (units, marks, bins)
-    # spike_counts_shuffled = np.concatenate(
-    #     spike_counts_shuffled, axis=0
-    # )  # shape = (units, marks, bins)
-    # spike_counts = np.sum(spike_counts, axis=0)
+        spike_counts_shuffled, dtype=object
     ind = spike_counts.sum(axis=1) > 1e1
     spike_counts = spike_counts[ind]
-    spike_counts_shuffled = np.array(spike_counts_shuffled)[ind]
-    # print("opto", opto_key)
-    # print("key_list", key_list)
+    spike_counts_shuffled = np.array(spike_counts_shuffled, dtype=object)[ind]
+
 
     if len(spike_counts) == 0:
         if return_data:
@@ -664,6 +658,8 @@ def opto_spiking_dynamics_place_dependence(
                 for tp in pulse_timepoints
             ]
         )
+        spikes = [s for s in spikes if len(s) > 0]
+
         for n_pos, pos_range in enumerate(place_field_ranges):
             # get histogram spike counts
             for n_spike, unit_spikes in enumerate(spikes[:]):
