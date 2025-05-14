@@ -1,8 +1,8 @@
-from spyglass.common import convert_epoch_interval_name_to_position_interval_name
-from spyglass.spikesorting.v0 import CuratedSpikeSorting
-import pandas as pd
 import numpy as np
+from typing import List
+import os
 import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
 from spyglass.common import (
     interval_list_contains,
     interval_list_intersect,
@@ -11,14 +11,74 @@ from spyglass.common import (
     TaskEpoch,
 )
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
-import os
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
+
 from ms_opto_stim_protocol import OptoStimProtocol
 from Analysis.spiking_analysis import smooth
-
 from Analysis.utils import filter_opto_data, get_running_valid_intervals
 from Style.style_guide import interval_style
+
+
+os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
+
+
+def unit_autocorrelegram(
+    spike_times: List,
+    bins: List,
+    valid_interval: List[List] = None,
+    smooth_sigma: float = 0.015,
+):
+    """Gets the autocorrelegram of a single unit mark process
+
+    Parameters
+    ----------
+    spike_times : List
+        mark times of process
+    bins : List
+        lag times to bin histogram
+    valid_interval : List[List]
+        IntervalList of valid times
+    smooth_sigma : float, optional
+        sigma of gaussian smoothing of the histogram (in units of bins time units), by default .015
+
+    Returns
+    -------
+    List
+        the autocorrelegram
+    """
+
+    absolute_bin_times = np.add.outer(spike_times, bins).ravel()
+    absolute_bin_index = np.array(
+        [np.arange(bins.size) for _ in range(spike_times.size)]
+    ).ravel()
+
+    # to normalize the spike counts,
+    # need to know how many valid instances of lagged bins there were in the interval
+    # This is valid_bin_counts
+    if valid_interval is not None:
+        valid_bin_index = absolute_bin_index[
+            interval_list_contains_ind(valid_interval, absolute_bin_times)
+        ]
+    else:
+        valid_bin_index = absolute_bin_index[:]
+    valid_bin_count = np.bincount(valid_bin_index, minlength=bins.size)
+    # Get the delay time histogram
+    if valid_interval is not None:
+        spike_times = interval_list_contains(valid_interval, spike_times)
+    delays = np.subtract.outer(spike_times, spike_times)
+    # delays = delays[np.tril_indices_from(delays, k=0)] # if only care about positive lags and spikes are monotonically ordered in time
+    delays = np.ravel(delays)
+    delays = delays[np.logical_and(delays <= bins[-1], delays >= bins[0])]
+
+    vals, bins = np.histogram(delays, bins=bins)
+    vals = vals + 1e-9  # laplace shift
+    vals = vals / valid_bin_count[:-1] / np.mean(np.diff(bins))
+    if smooth_sigma:
+        sigma = int(smooth_sigma / np.mean(np.diff(bins)))
+        vals = smooth(vals, 3 * sigma, sigma)
+    bins = bins[:-1] + np.diff(bins) / 2
+
+    return vals
 
 
 def autocorrelegram(
@@ -87,6 +147,7 @@ def autocorrelegram(
         decode_key = {
             "nwb_file_name": nwb_file_name,
             "encoding_interval": pos_interval,
+            "sorted_spikes_group_name": interval_name,
         }
         if not SortedSpikesDecodingV1 & decode_key:
             continue
@@ -118,46 +179,10 @@ def autocorrelegram(
                     test_interval,
                 ]
             ):
-                x = interval_list_contains(interval, spikes)
-                bins = histogram_bins[:-1]
-                absolute_bin_times = np.add.outer(x, bins).ravel()
-                absolute_bin_index = np.array(
-                    [np.arange(bins.size) for _ in range(x.size)]
-                ).ravel()
                 valid_interval = interval_list_intersect(
                     np.array(interval), np.array(run_intervals)
                 )
-                valid_bin_index = absolute_bin_index[
-                    interval_list_contains_ind(valid_interval, absolute_bin_times)
-                ]
-                valid_bin_count = np.bincount(valid_bin_index, minlength=bins.size)
-
-                # if x.size<300:
-                #     results[i].append(np.zeros_like(histogram_bins[:-1]))
-                #     if i==1:
-                #         counts.append(0)
-                #     continue
-                if i == 1:
-                    counts.append(x.size)
-                delays = np.subtract.outer(x, x)
-                # delays = delays[np.tril_indices_from(delays, k=0)]
-                delays = np.ravel(delays)
-                # delays = delays[delays != 0]
-                delays = delays[
-                    np.logical_and(
-                        delays < histogram_bins[-1], delays > histogram_bins[0]
-                    )
-                ]
-                # delays = delays[np.abs(delays) > 0]
-                vals, bins = np.histogram(delays, bins=histogram_bins)
-                vals = vals + 1e-9
-                vals = vals / valid_bin_count
-                sigma = int(0.015 / np.mean(np.diff(histogram_bins)))
-                vals = smooth(vals, 3 * sigma, sigma)
-                bins = bins[:-1] + np.diff(bins) / 2
-                # vals = vals / vals.sum()
-                # if linear_detrend:
-                #     vals = vals - np.polyval(np.polyfit(bins, vals, 1), bins)
+                vals = unit_autocorrelegram(spikes, histogram_bins, valid_interval)
 
                 results[i].append(vals)
 
@@ -186,7 +211,7 @@ def autocorrelegram(
             )
         return None
 
-    ## plot the results
+    # plot the results
     fig, ax = plt.subplots(
         1,
         6,
@@ -337,9 +362,6 @@ def autocorrelegram(
     return fig
 
 
-from scipy.signal import find_peaks
-
-
 def estimate_periodicity_timescale(autocorr, time, width=0.01):
     """
     Estimates the timescale of periodic peaks in the autocorrelation function.
@@ -449,7 +471,7 @@ def plot_periodicity_dependence(periodicities, driving_periods):
     return fig
 
 
-def rhythmicity_v2(data, tau=None, window=10):
+def rhythmicity_v2(data, tau=None, window=10, crosscorrelegram=False):
     """calculates rhythmicity of autocorrelogram
     Method from "Behavior-Dependent Activity and Synaptic Organization of Septo-hippocampal
     GABAergic Neurons Selectively Targeting the Hippocampal CA3 Area". Neuron 2017
@@ -470,7 +492,14 @@ def rhythmicity_v2(data, tau=None, window=10):
     for x in data:
         x = x / np.max(x[ind_peak])
         x = np.clip(x, 0, 1)
-        trend, fitted_function, params, r_squared = fit_data(tau, x)
+        try:
+            trend, fitted_function, params, r_squared = fit_data(
+                tau, x, crosscorrelegram=crosscorrelegram
+            )
+        except:
+            # if can't fit the function
+            rhythmicity_.append(0)
+            continue
         # print(
         #     "freq",
         #     params[0],
@@ -492,13 +521,20 @@ def linear_trend(x, y):
     return slope * x + intercept, r_value**2
 
 
-def gaussian_modulated_cosine(x, frequency, amplitude, stddev):
+def gaussian_modulated_cosine(
+    x,
+    frequency,
+    amplitude,
+    stddev,
+):  # phase=0):
     return (
-        amplitude * np.exp(-0.5 * (x / stddev) ** 2) * np.cos(2 * np.pi * frequency * x)
+        amplitude
+        * np.exp(-0.5 * ((x) / stddev) ** 2)
+        * np.cos(2 * np.pi * frequency * (x))
     )
 
 
-def fit_data(x, y):
+def fit_data(x, y, crosscorrelegram=False):
     # Fit linear trend
     trend, r_squared = linear_trend(x, y)
 
@@ -506,12 +542,14 @@ def fit_data(x, y):
     detrended_data = y - trend
 
     # Fit Gaussian-modulated cosine
-    # Initial guess: frequency = 6 Hz, amplitude = max(detrended_data), stddev = 50 ms
+    # Initial guess: frequency = 6 Hz, amplitude = max(detrended_data), stddev = 50 ms, phase = 0 (optional)
+    p0 = [6, np.max(detrended_data), 0.05]
+    if crosscorrelegram:
+        p0.append(0)
     params, covariance = curve_fit(
         gaussian_modulated_cosine,
         x,
         detrended_data,
-        p0=[6, np.max(detrended_data), 0.05],
     )
 
     # Calculate fitted function
@@ -541,7 +579,7 @@ def rhythmicity_index(x, y, fitted_function, trend):
     return rhythmicity
 
 
-def rhythmicity(data, tau=None, window=10):
+def rhythmicity(data, tau=None, window=10, crosscorrelagram=False):
     """calculates rhythmicity of autocorrelogram
     Uses method from: "The medial septum controls hippocampal supra-theta oscillations" Nature Comm. 2023
 
@@ -559,7 +597,7 @@ def rhythmicity(data, tau=None, window=10):
     rhythmicity score: np.array
         shape (n_neurons,)
     """
-    return rhythmicity_v2(data, tau, window)
+    return rhythmicity_v2(data, tau, window, crosscorrelegram=crosscorrelagram)
     if tau is None:
         tau = np.arange(data.shape[1])  # assume 1ms bins
     rhythmicity = []

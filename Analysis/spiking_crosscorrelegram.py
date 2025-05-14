@@ -1,28 +1,25 @@
-from tqdm import tqdm
-
-from spyglass.common import convert_epoch_interval_name_to_position_interval_name
-from spyglass.spikesorting.v0 import CuratedSpikeSorting
-from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
-import pandas as pd
-import numpy as np
-from scipy.signal import find_peaks
-import matplotlib.pyplot as plt
-from spyglass.common import (
-    interval_list_contains,
-    interval_list_intersect,
-    interval_list_contains_ind,
-    PositionIntervalMap,
-    TaskEpoch,
-)
-
-
 import os
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.signal import find_peaks
+from spyglass.common import (
+    PositionIntervalMap,
+    TaskEpoch,
+    interval_list_contains,
+    interval_list_contains_ind,
+    interval_list_intersect,
+)
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
+from spyglass.spikesorting.v0 import CuratedSpikeSorting
+from tqdm import tqdm
+
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import OptoStimProtocol
-from Analysis.spiking_analysis import smooth
 from Analysis.position_analysis import get_running_intervals
+from Analysis.spiking_analysis import smooth
 from Analysis.utils import filter_opto_data, get_running_valid_intervals, violin_scatter
+from ms_opto_stim_protocol import OptoStimProtocol
 from Style.style_guide import interval_style
 
 
@@ -33,6 +30,7 @@ def overlap_place_fields_crosscorrelegram(
     time_window: float = 0.2,
     gauss_smooth: float = 0.010,
     min_spikes: int = 1000,
+    closest_spike_only=False,
 ):
     """get the cross correlegram of pairs of units that have place fields that
     are a certain distance apart
@@ -48,7 +46,7 @@ def overlap_place_fields_crosscorrelegram(
     Returns:
         _type_: _description_
     """
-
+    full_day_sort = False
     # get the matching epochs
     dataset = filter_opto_data(dataset_key)
     nwb_file_name_list = dataset.fetch("nwb_file_name", limit=100)
@@ -57,9 +55,27 @@ def overlap_place_fields_crosscorrelegram(
     results = [[], []]
     time = []
     rates = [[], []]
+    distances = []
     # loop through epochs
     for nwb_file_name, interval in tqdm(zip(nwb_file_name_list, interval_list)):
-        key = {"nwb_file_name": nwb_file_name, "encoding_interval": interval}
+
+        sort_interval = (
+            (
+                PositionIntervalMap()
+                & {"nwb_file_name": nwb_file_name}
+                & {"position_interval_name": interval}
+            )
+            * TaskEpoch
+        ).fetch1("interval_list_name")
+        if full_day_sort:
+            sort_interval = "manual_full_day"
+
+        key = {
+            "nwb_file_name": nwb_file_name,
+            "encoding_interval": interval,
+            "sorted_spikes_group_name": sort_interval,
+            "position_group_name": interval,
+        }
         if not SortedSpikesDecodingV1() & key:
             continue
         # get the place field locations
@@ -70,33 +86,38 @@ def overlap_place_fields_crosscorrelegram(
             print("\n")
         # get the pairs of units that are correct distance apart
         included_pairs = []
+        pair_distance = []
         place_peak = np.argmax(place_fields, axis=1)
         for i in range(place_fields.shape[0]):
             for j in range(place_fields.shape[0]):
-                if j >= i:
-                    break
+                # if j >= i:
+                #     break
                 # if np.abs(place_peak[i] - place_peak[j]) < 10:
                 if np.allclose(place_peak[i], place_peak[j]):
                     continue
                 if (
                     np.abs(place_peak[i] - place_peak[j]) <= max_place_distance
-                    and np.abs(place_peak[i] - place_peak[j]) > min_place_distance
+                    and np.abs(place_peak[i] - place_peak[j]) >= min_place_distance
                 ):
                     included_pairs.append((i, j))
+                    pair_distance.append(place_peak[i] - place_peak[j])
 
         # get the cross correlegram of these pairs in this epoch
         opto_key = {"nwb_file_name": nwb_file_name, "interval_list_name": interval}
-        results_, time_, rates_ = crosscorrelegram(
+        results_, time_, rates_, pair_ids = crosscorrelegram(
             opto_key,
             min_spikes=min_spikes,
             gauss_smooth=gauss_smooth,
             window=time_window,
             analyze_pairs=included_pairs,
+            closest_spike_only=closest_spike_only,
+            return_ids=True,
         )
         time = time_
         for i in range(2):
             results[i].extend(results_[i])
             rates[i].extend(rates_[i])
+        distances.extend([place_peak[i] - place_peak[j] for (i, j) in pair_ids])
 
     results = [np.array(results[0]), np.array(results[1])]
     rates = [np.array(rates[0]), np.array(rates[1])]
@@ -105,6 +126,7 @@ def overlap_place_fields_crosscorrelegram(
     ax_rhythm = ax[0]
     # Calculate rhythmicity
     peak_width = int(0.1 / np.diff(time).mean())  # look for peaks that are 100ms wide
+    # peak_width = int(0.05 / np.diff(time).mean())
     avg_window = int(
         0.01 / np.diff(time).mean()
     )  # take the average of the 10ms around the peak
@@ -131,11 +153,40 @@ def overlap_place_fields_crosscorrelegram(
 
     # Calculate and plot peak cross correlegram times
     ax_peak = ax[1]
-    window = 0.0625
+    window = 0.05
     peak_window = np.logical_and(time > -1 * window, time < window)[:-1]
-    peak_time = [
-        time[:-1][peak_window][data[:, peak_window].argmax(axis=1)] for data in results
+
+    # # regress out the linear trend in the peak time
+    # def remove_linear_trend(data):
+    #     x = np.arange(data.shape[1])
+    #     for i in range(len(data)):
+    #         data[i] = data[i] - np.polyval(np.polyfit(x, data[i], 1), x)
+    #     return data
+
+    # peak_time = [
+    #     time[:-1][peak_window][
+    #         remove_linear_trend(data[:, peak_window].copy()).argmax(axis=1)
+    #     ]
+    #     for data in results
+    # ]
+
+    # peak_time = [time[:-1][data.argmax(axis=1)] for data in results]
+
+    filtered_corr = [boxcar_filter_set(data.T, 100, "divide").T for data in results]
+    # peak_time = [time[:-1][peak_window][data[:,peak_window].argmax(axis=1)] for data in filtered_corr]
+
+    all_peaks = [
+        [find_peaks(x, distance=peak_width)[0] for x in data] for data in filtered_corr
     ]
+
+    def closest_peak(x):
+        if len(x):
+            return time[x[np.argmin(np.abs(time[x]))]]
+        else:
+            return 0
+
+    peak_time = [[closest_peak(x) for x in data] for data in all_peaks]
+
     x_pos = []
     for i, (data, interval) in enumerate(zip(peak_time, ["control", "test"])):
         x_pos.append(
@@ -174,7 +225,7 @@ def overlap_place_fields_crosscorrelegram(
     ax[-1].set_xticks([])
     ax[-1].set_yticks([])
 
-    return results, time, rates, rhythmicity, peak_time
+    return results, time, rates, rhythmicity, peak_time, distances
 
 
 def crosscorrelegram(
@@ -186,6 +237,8 @@ def crosscorrelegram(
     gauss_smooth: float = 0.003,
     analyze_pairs: list = None,
     window: float = 0.1,
+    closest_spike_only=False,
+    return_ids=False,
 ):
     """Returns the cross correlegram of spike times between unit pairs in a dataset
 
@@ -202,6 +255,8 @@ def crosscorrelegram(
     Returns:
         results, histogram_bins, rates: cross correlegrams (Hz), bins, firing rates (of individual neuron, Hz)
     """
+    full_day_sort = False
+
     # get the matching epochs
     dataset = filter_opto_data(dataset_key)
     if len(dataset) > 1 and analyze_pairs is not None:
@@ -214,6 +269,7 @@ def crosscorrelegram(
     # get the cross-correlegrams
     results = [[], []]
     rates = [[], []]
+    pair_id = []
 
     if len(nwb_file_names) > 1:
         print(
@@ -254,31 +310,22 @@ def crosscorrelegram(
         test_interval, control_interval = (OptoStimProtocol & pos_key).fetch1(
             "test_intervals", "control_intervals"
         )
-        # # get the spike and position dat for each
-        # spike_df = []
-        # for sort_group in set(
-        #     (CuratedSpikeSorting() & basic_key).fetch("sort_group_id")
-        # ):
-        #     key = {"sort_group_id": sort_group}
-        #     cur_id = np.max(
-        #         (CuratedSpikeSorting() & basic_key & key).fetch("curation_id")
-        #     )
-        #     key["curation_id"] = cur_id
-        #     cur_id = 1
+        from spyglass.common import IntervalList
 
-        #     tetrode_df = (CuratedSpikeSorting & basic_key & key).fetch_nwb()[0]
-        #     if "units" in tetrode_df:
-        #         tetrode_df = tetrode_df["units"]
-        #         tetrode_df = tetrode_df[tetrode_df.label == ""]
-        #         spike_df.append(tetrode_df)
-        # if len(spike_df) == 0:
-        #     continue
-        # spike_df = pd.concat(spike_df)
-        # get the spike and position dat for each
+        # test_interval = (
+        #     IntervalList
+        #     & {
+        #         "nwb_file_name": nwb_file_name,
+        #         "interval_list_name": pos_interval + "_stimulus_on_interval",
+        #     }
+        # ).fetch1("valid_times")
+
         spike_df = []
         decode_key = {
             "nwb_file_name": nwb_file_name,
             "encoding_interval": pos_interval,
+            "sorted_spikes_group_name": interval_name,
+            "position_group_name": pos_interval,
         }
         decode_key = (SortedSpikesDecodingV1 & decode_key).fetch1("KEY")
         spike_df = SortedSpikesDecodingV1().fetch_spike_data(decode_key)
@@ -293,8 +340,7 @@ def crosscorrelegram(
             if interval[1] - interval[0] > min_run_time
         ]
 
-        histogram_bins = np.arange(-window, window, 0.002)
-        # histogram_bins = np.arange(-0.3, 0.3, 0.0005)
+        histogram_bins = np.arange(-window, window, 0.0005)
         print("number_units", len(spike_df))
         # loop through unit pairs
         for n_s1, spikes in enumerate(spike_df):
@@ -317,6 +363,7 @@ def crosscorrelegram(
                 valid_interval = interval_list_intersect(
                     np.array(interval), np.array(run_intervals)
                 )
+                valid_interval = interval
                 valid_bin_index = absolute_bin_index[
                     interval_list_contains_ind(valid_interval, absolute_bin_times)
                 ]
@@ -355,11 +402,19 @@ def crosscorrelegram(
 
                     # get the correlegram count
                     delays = np.subtract.outer(x, x2)
+                    if closest_spike_only:
+                        closest_spike = np.argmin(np.abs(delays), axis=1)
+                        delays = np.array(
+                            [
+                                delays[ii, closest_spike[ii]]
+                                for ii in range(closest_spike.size)
+                            ]
+                        )
                     delays = np.ravel(delays)
                     delays = delays[delays < histogram_bins[-1]]
                     delays = delays[delays >= histogram_bins[0]]
                     vals, bins = np.histogram(delays, bins=histogram_bins)
-                    vals = vals + 1e-9
+                    # vals = vals + 1e-1
                     if gauss_smooth:
                         sigma = int(
                             gauss_smooth / np.mean(np.diff(histogram_bins))
@@ -377,10 +432,13 @@ def crosscorrelegram(
                     rates[i].append(
                         x2.size / np.sum([e - s for s, e in interval])
                     )  # overall rate of the neuron
+                pair_id.append([n_s1, n_s2])
 
     results = [np.array(r) for r in results]
     rates = [np.array(r) for r in rates]
 
+    if return_ids:
+        return results, histogram_bins, rates, pair_id
     return results, histogram_bins, rates
 
 
@@ -775,3 +833,71 @@ def cross_correlation_rhythmicity(x, width=150, avg_window=10):
     )
     rhythmicity = (peak_vals - trough_vals) / peak_vals
     return rhythmicity
+
+
+# def peak_corr_offset(x, width=150,):
+
+
+from scipy.signal import welch
+
+
+def get_fft_rhythmicities(
+    cross_correlegrams, lag_times, freq_range=(5, 11), nperseg=None
+):
+    """
+    returns a rhythmicity score based on relative theta-rng power
+
+    Parameters
+    ----------
+    cross_correlegrams : np.array
+        the cross-correlegram
+    lag_times : List
+        the lag times of cross-correlegram points
+    freq_range : tuple, optional
+        frequency range from which to extract max power, by default (5,11)
+    nperseg : int, optional
+        welch fft parameter, by default None
+
+    Returns
+    -------
+    List
+        the rhythmicity scores
+    """
+
+    fft_rhythmicity = []
+    for x in cross_correlegrams:
+        if np.max(x) > 1e9:
+            print(x)
+            raise
+        xx = x / np.nanmax(x)
+        fs = 1 / np.mean(np.diff(lag_times))
+
+        # Use Welch's method with zero padding via nfft
+        frequencies, power_spectrum = welch(
+            xx, fs=fs, nperseg=nperseg, nfft=10000, scaling="density"
+        )
+        rhythm_power = np.nanmax(
+            power_spectrum[
+                np.logical_and(frequencies > freq_range[0], frequencies < freq_range[1])
+            ]
+        )
+        fft_rhythmicity.append(rhythm_power)
+    print(frequencies)
+    return np.array(fft_rhythmicity)  # [np.isfinite(fft_rhythmicity)]
+
+
+def boxcar_filter(x, size=100, method="subtract"):
+    filter = np.ones(size) / size
+    if method == "subtract":
+        return x - np.convolve(x, filter, mode="same")
+    elif method == "divide":
+        return x / np.convolve(x, filter, mode="same")
+    else:
+        raise NotImplementedError(f"method {method} not defined for boxcar filter")
+
+
+def boxcar_filter_set(data, size, method="subtract"):
+    result = []
+    for i in range(data.shape[1]):
+        result.append(boxcar_filter(data[:, i], size, method))
+    return np.array(result).T
