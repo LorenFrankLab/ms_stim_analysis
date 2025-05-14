@@ -198,6 +198,7 @@ def get_control_test_power_spectrum(
     pos_interval_name: str = None,
     filter_ports: bool = False,
     return_stim_psd: bool = False,
+    dlc_pos = False,
 ) -> Tuple[list, list, list, list, list]:
     """get the power spectrum for the control (no optogenetics) and test (optogenetics) intervals
     Filters out periods of excessve LFP amplitude
@@ -238,11 +239,12 @@ def get_control_test_power_spectrum(
     key.update({"interval_list_name": pos_interval_name})
 
     # make intervals where rat is running
-    run_intervals = get_running_intervals(**key, filter_speed=filter_speed)
+    run_intervals = get_running_intervals(**key, filter_speed=filter_speed,dlc_pos=dlc_pos)
     # intersect with position-defined intervals
     if filter_ports:
         valid_position_intervals = filter_position_ports(
-            {"nwb_file_name": nwb_file_name, "interval_list_name": pos_interval_name}
+            {"nwb_file_name": nwb_file_name, "interval_list_name": pos_interval_name},
+            dlc_pos=dlc_pos
         )
         if len(valid_position_intervals) == 0:
             return (
@@ -258,7 +260,7 @@ def get_control_test_power_spectrum(
 
     from .utils import get_running_valid_intervals
 
-    optogenetic_run_interval, control_run_interval = get_running_valid_intervals(key)
+    optogenetic_run_interval, control_run_interval = get_running_valid_intervals(key,dlc_pos=dlc_pos)
 
     # Begin analysis
     basic_key = {
@@ -620,6 +622,7 @@ def opto_spectrum_analysis(
     filter_speed: float = 10.0,
     window: float = 1.0,
     return_distributions: bool = False,
+    dlc_pos=False,
 ):
     """Generates a figure with the power spectrum for the control and test intervals, and the distribution of entrainment statistics
     Normalizes the spectrum power on a per-animal basis, using control interval peak as reference
@@ -735,6 +738,7 @@ def opto_spectrum_analysis(
             window,
             pos_interval_name=interval_name,
             filter_ports=1,
+            dlc_pos=dlc_pos,
         )
         if len(f_) > 0:
             f = f_.copy()
@@ -924,6 +928,7 @@ def opto_spectrum_analysis_full_probe(
             window,
             pos_interval_name=interval_name,
             filter_ports=1,
+            dlc_pos = dlc_pos,
         )
         if len(f_) > 0:
             f = f_.copy()
