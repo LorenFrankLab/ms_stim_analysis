@@ -154,7 +154,7 @@ def discrete_KL_divergence(p, q="uniform", laplace_smooth=True, pool_bins=5):
         p = p / p.sum()  # / (p.sum() + p.shape[0])
         q = q + 1
         q = q / q.sum()  # / (q.sum() + q.shape[0])
-    return np.nansum(p * np.log2(p / q))
+    return np.nansum(p * np.log2(p.astype(float) / q.astype(float)))
 
 
 def stacked_marks_to_kl(arr):
