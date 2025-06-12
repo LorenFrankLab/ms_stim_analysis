@@ -236,6 +236,12 @@ def opto_spiking_dynamics(
         interval_restrict = np.array(
             [[tp + plot_rng[0], tp + plot_rng[-1]] for tp in pulse_timepoints]
         )
+        from spyglass.common.common_interval import Interval
+
+        interval_restrict = (
+            Interval(interval_restrict, no_overlap=True).consolidate().times
+        )
+
         period = (OptoStimProtocol() & opto_key).fetch1("period_ms")
         if "period_ms" in dataset_key:
             shuffle_window = dataset_key["period_ms"] / 1000.0
@@ -247,6 +253,9 @@ def opto_spiking_dynamics(
                 [tp + plot_rng[0] - shuffle_window, tp + plot_rng[-1] + shuffle_window]
                 for tp in pulse_timepoints
             ]
+        )
+        interval_restrict_shuffle = (
+            Interval(interval_restrict_shuffle, no_overlap=True).consolidate().times
         )
 
         # get histogram spike counts
@@ -289,12 +298,10 @@ def opto_spiking_dynamics(
             return None, [], [], []
         return
     spike_counts = np.array(spike_counts)  # shape = (units,bins)
-    spike_counts_shuffled = np.array(
-        spike_counts_shuffled, dtype=object
+    spike_counts_shuffled = np.array(spike_counts_shuffled, dtype=object)
     ind = spike_counts.sum(axis=1) > 1e1
     spike_counts = spike_counts[ind]
     spike_counts_shuffled = np.array(spike_counts_shuffled, dtype=object)[ind]
-
 
     if len(spike_counts) == 0:
         if return_data:
