@@ -2,12 +2,13 @@ import datajoint as dj
 import spyglass.common as sgc
 import numpy as np
 import matplotlib.pyplot as plt
+from spyglass.utils.dj_mixin import SpyglassMixin
 
 schema = dj.schema("ms_opto_stim_protocol")
 
 
 @schema
-class OptoStimProtocolParams(dj.Manual):
+class OptoStimProtocolParams(SpyglassMixin, dj.Manual):
     """
     Parameters for Inferinng optogenetic stimulus from DIO data
     """
@@ -60,7 +61,7 @@ class OptoStimProtocolParams(dj.Manual):
 
 
 @schema
-class OptoStimProtocolSelection(dj.Manual):
+class OptoStimProtocolSelection(SpyglassMixin, dj.Manual):
     """
     Table to pair an interval with position data
     and position determination parameters
@@ -75,7 +76,7 @@ class OptoStimProtocolSelection(dj.Manual):
 
 
 @schema
-class OptoStimProtocol(dj.Computed):
+class OptoStimProtocol(SpyglassMixin, dj.Computed):
     """
     Table to calculate the position based on Trodes tracking
     """

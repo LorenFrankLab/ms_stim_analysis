@@ -3,14 +3,16 @@ import datajoint as dj
 from spyglass.common import TaskEpoch
 
 from Metadata.metadata_helpers import get_ms_nwbf_epoch_keys
+from spyglass.utils.dj_mixin import SpyglassMixin
 
 schema = dj.schema("ms_metadata")
 
+
 @schema
-class TaskIdentification(dj.Computed):
+class TaskIdentification(SpyglassMixin, dj.Computed):
     definition = """
     # Epoch environment and reward contingency
-    -> TaskEpoch 
+    -> TaskEpoch
     ---
     contingency : varchar(40)
     task_environment : varchar(40)
@@ -25,15 +27,21 @@ class TaskIdentification(dj.Computed):
             key["contingency"] = task_epoch_entry["task_name"].split("_")[1]
         key["task_environment"] = task_epoch_entry["task_environment"]
         self.insert1(key)  # insert into table
-        print("Populated TaskIdentification for file {nwb_file_name}, epoch {epoch}".format(**key))
+        print(
+            "Populated TaskIdentification for file {nwb_file_name}, epoch {epoch}".format(
+                **key
+            )
+        )
 
     def get_contingency(self, nwb_file_name, epoch):
-        return (self & {"nwb_file_name": nwb_file_name,
-                        "epoch": epoch}).fetch1("contingency")
+        return (self & {"nwb_file_name": nwb_file_name, "epoch": epoch}).fetch1(
+            "contingency"
+        )
 
     def get_environment(self, nwb_file_name, epoch):
-        return (self & {"nwb_file_name": nwb_file_name,
-                        "epoch": epoch}).fetch1("task_environment")
+        return (self & {"nwb_file_name": nwb_file_name, "epoch": epoch}).fetch1(
+            "task_environment"
+        )
 
     def populate_(self):
         for key in get_ms_nwbf_epoch_keys():
