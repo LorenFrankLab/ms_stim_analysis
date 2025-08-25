@@ -1,5 +1,5 @@
 import datajoint as dj
-from non_local_detector.analysis import (
+from non_local_detector.model_checking import (
     get_HPD_spatial_coverage,
     get_highest_posterior_threshold,
 )
