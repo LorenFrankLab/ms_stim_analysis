@@ -7,15 +7,15 @@ from spyglass.common import Nwbfile
 from spyglass.utils.dj_helper_fn import fetch_nwb
 from spyglass.utils.dj_mixin import SpyglassMixin
 
-from Datajoint_nwb_utils.datajoint_table_helpers import (
+from .Utils.datajoint_table_helpers import (
     insert_analysis_table_entry,
     fetch1_dataframe,
     get_table_object_id_name,
 )
-from Utils.df_helpers import df_pop
-from Datajoint_nwb_utils.nwbf_helpers import events_in_epoch_bool
-from Utils.plot_helpers import format_ax
-from Utils.vector_helpers import remove_repeat_elements
+from .Utils.df_helpers import df_pop
+from .Utils.nwbf_helpers import events_in_epoch_bool
+from .Utils.plot_helpers import format_ax
+from .Utils.vector_helpers import remove_repeat_elements
 
 schema = dj.schema("ms_dio_event")
 

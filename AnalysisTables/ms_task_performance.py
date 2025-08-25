@@ -1,9 +1,9 @@
 import datajoint as dj
 import numpy as np
 
-from Utils.list_helpers import check_lists_same_length
-from Task_event.ms_dio_event import get_poke_name, ProcessedDioEvents
-from Metadata.ms_task_identification import TaskIdentification
+from .Utils.list_helpers import check_lists_same_length
+from .ms_dio_event import get_poke_name, ProcessedDioEvents
+from .ms_task_identification import TaskIdentification
 from spyglass.utils.dj_mixin import SpyglassMixin
 
 schema = dj.schema("ms_task_performance")

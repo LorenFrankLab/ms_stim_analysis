@@ -2,7 +2,6 @@ import datajoint as dj
 
 from spyglass.common import TaskEpoch
 
-from Metadata.metadata_helpers import get_ms_nwbf_epoch_keys
 from spyglass.utils.dj_mixin import SpyglassMixin
 
 schema = dj.schema("ms_metadata")
@@ -42,7 +41,3 @@ class TaskIdentification(SpyglassMixin, dj.Computed):
         return (self & {"nwb_file_name": nwb_file_name, "epoch": epoch}).fetch1(
             "task_environment"
         )
-
-    def populate_(self):
-        for key in get_ms_nwbf_epoch_keys():
-            self.populate(key)

@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from Utils.point_process_helpers import event_times_in_intervals_bool
 
 
 def df_filter_columns(df, key, column_and=True):

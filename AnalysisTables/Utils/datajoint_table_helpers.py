@@ -2,11 +2,8 @@ import numpy as np
 import pandas as pd
 import spyglass as nd
 import copy
-from spyglass.common import IntervalList, Session
 
-from Time_and_trials.ms_interval import EpochIntervalListName
-from Utils.string_helpers import snake_to_camel_case
-from Utils.vector_helpers import unpack_single_element
+from .vector_helpers import unpack_single_element
 
 
 def create_analysis_nwbf(key, nwb_objects, nwb_object_names):
@@ -16,7 +13,7 @@ def create_analysis_nwbf(key, nwb_objects, nwb_object_names):
     nwb_analysis_file = nd.common.AnalysisNwbfile()
     # Check that objects all dfs (code currently assumes this in defining table_name)
     if not all([isinstance(x, pd.DataFrame) for x in nwb_objects]):
-        raise Exception(f"create_analysis_nwbf currently assumes all objects dfs")
+        raise Exception("create_analysis_nwbf currently assumes all objects dfs")
     for nwb_object_name, nwb_object in zip(nwb_object_names, nwb_objects):
         key[nwb_object_name] = nwb_analysis_file.add_nwb_object(
             analysis_file_name=key["analysis_file_name"],
@@ -29,14 +26,14 @@ def create_analysis_nwbf(key, nwb_objects, nwb_object_names):
     return key
 
 
-# def fetch1_dataframe(obj, object_name, restore_empty_nwb_object=True):
-#     entries = obj.fetch_nwb()
-#     if len(entries) != 1:
-#         raise Exception(f"Should have found exactly one entry but found {len(entries)}")
-#     df = entries[0][object_name]
-#     if restore_empty_nwb_object:  # restore altered empty nwb_object
-#         return handle_empty_nwb_object(df, from_empty=False)
-#     return df
+def fetch1_dataframe(obj, object_name, restore_empty_nwb_object=True):
+    entries = obj.fetch_nwb()
+    if len(entries) != 1:
+        raise Exception(f"Should have found exactly one entry but found {len(entries)}")
+    df = entries[0][object_name]
+    if restore_empty_nwb_object:  # restore altered empty nwb_object
+        return handle_empty_nwb_object(df, from_empty=False)
+    return df
 
 
 def handle_empty_nwb_object(nwb_object, from_empty):

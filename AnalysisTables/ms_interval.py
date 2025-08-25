@@ -1,6 +1,6 @@
 import datajoint as dj
 import numpy as np
-from Metadata.ms_task_identification import TaskIdentification
+from .ms_task_identification import TaskIdentification
 from spyglass.common import TaskEpoch, IntervalList
 from spyglass.utils.dj_mixin import SpyglassMixin
 
@@ -102,7 +102,7 @@ class EpochIntervalListName(SpyglassMixin, dj.Computed):
             matched_pos_interval_list_names
         ):
             raise Exception(
-                f"At least one pos interval list name was matched with more than one epoch"
+                "At least one pos interval list name was matched with more than one epoch"
             )
         # Unpack matching pos interval lists from array
         epoch_pos_valid_time_dict = {

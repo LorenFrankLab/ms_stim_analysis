@@ -3,7 +3,7 @@ import datajoint as dj
 from spyglass.common import StateScriptFile
 from spyglass.utils.dj_mixin import SpyglassMixin
 
-from Metadata.ms_task_identification import TaskIdentification
+from .ms_task_identification import TaskIdentification
 
 TaskIdentification
 

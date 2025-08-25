@@ -1,6 +1,6 @@
 import numpy as np
 from spyglass.common import TaskEpoch, IntervalList, Session
-from Utils.point_process_helpers import event_times_in_intervals_bool
+from .point_process_helpers import event_times_in_intervals_bool
 
 
 def get_epoch_valid_times(nwb_file_name, epoch):
