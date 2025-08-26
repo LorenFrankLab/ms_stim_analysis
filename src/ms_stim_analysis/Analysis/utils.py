@@ -1,24 +1,21 @@
-import datajoint as dj
-from spyglass.common import Session, interval_list_contains_ind, interval_list_intersect
+from spyglass.common import Session, interval_list_intersect
 from datajoint.user_tables import UserTable
 import numpy as np
 from typing import Tuple
 from tqdm import tqdm
 
-import os
 import scipy
 import matplotlib.pyplot as plt
-from Metadata.ms_task_identification import TaskIdentification
-from Time_and_trials.ms_interval import EpochIntervalListName
+from ms_stim_analysis.AnalysisTables.ms_task_identification import TaskIdentification
+from ms_stim_analysis.AnalysisTables.ms_interval import EpochIntervalListName
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import (
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import (
     OptoStimProtocol,
     OptoStimProtocolTransfected,
     OptoStimProtocolLaser,
     OptoStimProtocolClosedLoop,
 )
-from Analysis.position_analysis import get_running_intervals, filter_position_ports
+from .position_analysis import get_running_intervals, filter_position_ports
 
 
 def filter_animal(table: UserTable, animal: str) -> UserTable:
@@ -39,10 +36,15 @@ def filter_animal(table: UserTable, animal: str) -> UserTable:
     if len(animal) == 0:
         return table
     animal_key = {"subject_id": animal}
-    if animal =="transfected":
-        animal_key = [{"subject_id": name} for name in [ "Totoro", "Winnie", "Banner", "Frodo","Odins"]]
+    if animal == "transfected":
+        animal_key = [
+            {"subject_id": name}
+            for name in ["Totoro", "Winnie", "Banner", "Frodo", "Odins"]
+        ]
     elif animal == "control":
-        animal_key = [{"subject_id": name} for name in ["Yoshi", "Olive", "Wallie", "Bilbo"]]
+        animal_key = [
+            {"subject_id": name} for name in ["Yoshi", "Olive", "Wallie", "Bilbo"]
+        ]
     return table & ((table * Session) & animal_key).fetch("KEY")
 
 
@@ -323,17 +325,19 @@ def bootstrap_compare(
     bootstrap = np.array(bootstrap)
     if return_samples:
         return (
-            np.mean(bootstrap,axis=0),
+            np.mean(bootstrap, axis=0),
             [
-                np.percentile(bootstrap, (100 - conf_interval) / 2,axis=0),
-                np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2,axis=0),
+                np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
+                np.percentile(
+                    bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0
+                ),
             ],
             bootstrap,
         )
 
-    return np.mean(bootstrap,axis=0), [
-        np.percentile(bootstrap, (100 - conf_interval) / 2,axis=0),
-        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2,axis=0),
+    return np.mean(bootstrap, axis=0), [
+        np.percentile(bootstrap, (100 - conf_interval) / 2, axis=0),
+        np.percentile(bootstrap, conf_interval + (100 - conf_interval) / 2, axis=0),
     ]
 
 
@@ -580,11 +584,13 @@ early_wtrack_files = [
 
 early_wtrack_keys = [dict(nwb_file_name=x) for x in early_wtrack_files]
 
-first_wtrack_keys = [{"nwb_file_name": "Yoshi20220517_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Olive20220711_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Wallie20220922_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Bilbo20230802_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Totoro20220613_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Winnie20220719_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Banner20220224_.nwb","interval_list_name": "pos 1 valid times"},
-                     {"nwb_file_name": "Frodo20230814_.nwb","interval_list_name": "pos 1 valid times"}]
+first_wtrack_keys = [
+    {"nwb_file_name": "Yoshi20220517_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Olive20220711_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Wallie20220922_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Bilbo20230802_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Totoro20220613_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Winnie20220719_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Banner20220224_.nwb", "interval_list_name": "pos 1 valid times"},
+    {"nwb_file_name": "Frodo20230814_.nwb", "interval_list_name": "pos 1 valid times"},
+]

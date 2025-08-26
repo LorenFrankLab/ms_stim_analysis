@@ -1,8 +1,4 @@
 import numpy as np
-import os
-
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from spiking_analysis_tables import BinnedSpiking
 
 
 def normalize_by_index_wrapper(index_norms):
@@ -91,19 +87,6 @@ def shuffled_spiking_distribution(
         shuffled_counts, axis=1
     )  # concatenate along the marks axis
     return shuffled_counts  # shape = (units, marks, bins)
-
-
-def generate_alligned_binned_spike_func(bin_key, rng):
-    def alligned_binned_spike_func(marks):
-        spikes_group = (BinnedSpiking() & bin_key).mark_alligned_binned_spikes(
-            bin_key, marks=marks, rng=rng
-        )  # shape = (n_marks, n_units, n_bins)
-        spikes_group = np.swapaxes(
-            spikes_group, 0, 1
-        )  # shape = (n_units, n_marks, n_bins)
-        return spikes_group
-
-    return alligned_binned_spike_func
 
 
 def bootstrap(

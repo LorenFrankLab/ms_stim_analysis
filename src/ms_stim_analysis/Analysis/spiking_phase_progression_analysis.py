@@ -1,75 +1,20 @@
-from typing import Tuple
 import numpy as np
 import pandas as pd
-import pandas as pd
 import matplotlib.pyplot as plt
-
-import matplotlib.gridspec as gridspec
-import matplotlib.cm as cm
-import matplotlib as mpl
-import os
-from scipy import signal
 from tqdm import tqdm
+import scipy.signal
 
-import spyglass.common as sgc
 from spyglass.common import (
-    Session,
-    IntervalList,
-    LabMember,
-    LabTeam,
-    Raw,
-    Session,
-    Nwbfile,
-    TaskEpoch,
-    Electrode,
-    ElectrodeGroup,
-    LFP,
-    LFPSelection,
-    LFPBand,
-    LFPBandSelection,
-    get_electrode_indices,
-    convert_epoch_interval_name_to_position_interval_name,
     PositionIntervalMap,
     interval_list_contains,
 )
-from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.analysis.v1 import LFPBandV1
-from .position_analysis import get_running_intervals, filter_position_ports
-from .utils import convert_delta_marks_to_timestamp_values, filter_opto_data
-
-
-import sys
-
-import sys
-
-sys.path.append("/home/sambray/Documents/MS_analysis_samsplaying/")
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import (
-    OptoStimProtocol,
-    OptoStimProtocolLaser,
-    OptoStimProtocolTransfected,
-    OptoStimProtocolClosedLoop,
-)
-from Analysis.utils import (
-    filter_animal,
-    weighted_quantile,
-    filter_task,
-    convert_delta_marks_to_timestamp_values,
-)
-from Analysis.circular_shuffle import (
-    generate_alligned_binned_spike_func,
-    shuffled_spiking_distribution,
-    discrete_KL_divergence,
-    bootstrap,
-    stacked_marks_to_kl,
-)
-
-from Analysis.lfp_analysis import get_ref_electrode_index
-
-from spiking_analysis_tables import BinnedSpiking
 from spyglass.spikesorting import CuratedSpikeSorting
-import scipy.signal
+
+from .utils import filter_opto_data
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
+from .lfp_analysis import get_ref_electrode_index
 
 
 def phase_progression_analysis(
@@ -182,50 +127,6 @@ def phase_progression_analysis(
                 spike_phase.append((phase_[spike_ind] + np.pi) % (2 * np.pi))
             spike_phase_list[i].extend(spike_phase)
 
-    ### PLOT ###
-    # nrows = 10
-    # fig, ax = plt.subplots(nrows=nrows, ncols=1, figsize=(5, 10))
-    # crop = 20
-    # crop_rng = [crop_rng[0] + crop, crop_rng[1] - crop]
-
-    # ax_count = 0
-    # for i in range(len(spike_pos_list[0])):
-    #     skip = False
-    #     ind_list = []
-    #     for interval, color in enumerate(["cornflowerblue", "firebrick"]):
-    #         ind = np.where(
-    #             np.logical_and(
-    #                 np.logical_and(
-    #                     spike_pos_list[interval][i] > crop_rng[0],
-    #                     spike_pos_list[interval][i] < crop_rng[1],
-    #                 ),
-    #                 spike_velocity_list[interval][i] < -10,
-    #             )
-    #         )[0]
-    #         if ind.size < 100:
-    #             skip = True
-    #         ind_list.append(ind)
-    #     if skip:
-    #         continue
-    #     for interval, (ind, color) in enumerate(
-    #         zip(ind_list, ["cornflowerblue", "firebrick"])
-    #     ):
-    #         ax[ax_count].scatter(
-    #             spike_pos_list[interval][i][ind],
-    #             spike_phase_list[interval][i][ind],
-    #             s=10,
-    #             alpha=0.3,
-    #             color=color,
-    #         )
-    #     ax[ax_count].set_yticks([0, np.pi, 2 * np.pi])
-    #     ax[ax_count].set_yticklabels(["0", "$\pi$", "$2\pi$"])
-    #     ax_count += 1
-    #     if ax_count >= len(ax):
-    #         break
-
-    # ax[-1].set_xlabel("position")
-    # ax[-1].set_ylabel("phase")
-
     ### PLOT heatmap ###
     nrows = 3
     fig, ax = plt.subplots(nrows=nrows, ncols=2, figsize=(5, 10), sharey=True)
@@ -273,13 +174,6 @@ def phase_progression_analysis(
                 extent=[crop_rng[0], crop_rng[1], 0, 2 * np.pi],
             )
 
-            # ax[ax_count, interval].scatter(
-            #     spike_pos_list[interval][i][ind],
-            #     spike_phase_list[interval][i][ind],
-            #     s=10,
-            #     alpha=0.3,
-            #     color=color,
-            # )
             ax[ax_count, 0].set_yticks([0, np.pi, 2 * np.pi])
             ax[ax_count, 0].set_yticklabels(["0", "$\pi$", "$2\pi$"])
         ax_count += 1
@@ -288,20 +182,3 @@ def phase_progression_analysis(
     ax[-1, 0].set_xlabel("position")
     ax[-1, 1].set_xlabel("position")
     ax[-1, 0].set_ylabel("phase")
-    # ax[-1].set_xlabel("position")
-    # ax[-1].set_ylabel("phase")
-
-    # spike_pos = np.concatenate(spike_pos_list[i])
-    # spike_phase = np.concatenate(spike_phase_list[i])
-    # # plot the results
-    # ax[ax_count].hist2d(spike_pos, spike_phase, bins=plot_rng)
-    # ax[ax_count].set_title("spike position vs phase")
-    # ax[ax_count].set_xlabel("position")
-    # ax[ax_count].set_ylabel("phase")
-    # ax_count += 1
-    # ax[ax_count].hist(spike_pos, bins=100)
-    # ax[ax_count].set_title("spike position")
-    # ax_count += 1
-    # ax[ax_count].hist(spike_phase, bins=100)
-    # ax[ax_count].set_title("spike phase")
-    # ax_count += 1

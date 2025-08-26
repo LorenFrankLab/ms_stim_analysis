@@ -1,23 +1,11 @@
-from spyglass.common import convert_epoch_interval_name_to_position_interval_name
-from spyglass.spikesorting.v0 import CuratedSpikeSorting
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from spyglass.common import interval_list_contains, PositionIntervalMap, TaskEpoch
-
-import os
-
-import spyglass.spikesorting.v0 as sgs
+from spyglass.common import PositionIntervalMap, TaskEpoch
 
 # from spyglass.spikesorting.spiksorti import SpikeSortingOutput
-from spyglass.decoding.v1.sorted_spikes import (
-    SortedSpikesDecodingV1,
-    SortedSpikesDecodingSelection,
-)
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1,
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-
-from Analysis.utils import filter_opto_data, violin_scatter
+from .utils import filter_opto_data, violin_scatter
 
 
 def decoding_place_fields(
@@ -112,12 +100,6 @@ def decoding_place_fields(
             p_loc = encoding["occupancy"]
             p_loc = p_loc / p_loc.sum()
             from Analysis.spiking_analysis import spatial_information_rate
-
-            # information_rate = [
-            #     spatial_information_rate(spike_rate=field[5:-5], p_loc=p_loc[5:-5])
-            #     for field in place_field
-            # ]
-            # information_rates_list[i].extend(information_rate)
 
             place = list(
                 (
@@ -225,28 +207,6 @@ def decoding_place_fields(
         )
         ax[-3].set_xticks([])
         ax[-3].spines[["top", "right", "bottom"]].set_visible(False)
-        # information rate
-        # xx_prev, yy_prev = (None, None)
-        # for i, (information_rates, color) in enumerate(
-        #     zip(
-        #         information_rates_list,
-        #         [interval_style["control"], interval_style["test"], "purple"],
-        #     )
-        # ):
-        #     xx, yy = violin_scatter(
-        #         information_rates, i, ax=ax[-2], color=color, return_locs=True
-        #     )
-        #     if xx_prev is not None:
-        #         for ii in range(len(xx)):
-        #             ax[-2].plot(
-        #                 [xx_prev[ii], xx[ii]],
-        #                 [yy_prev[ii], yy[ii]],
-        #                 color="grey",
-        #                 alpha=0.2,
-        #                 zorder=-1,
-        #             )
-        #     xx_prev, yy_prev = xx, yy
-        #     ax[-2].set_title("Information rate")
 
         ax[-2].set_xticks([0, 1, 2], ["control", "test", "stim-on"])
 

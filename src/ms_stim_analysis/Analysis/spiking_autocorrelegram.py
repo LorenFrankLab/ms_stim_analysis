@@ -13,10 +13,9 @@ from spyglass.common import (
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 
 
-from ms_opto_stim_protocol import OptoStimProtocol
-from Analysis.spiking_analysis import smooth
-from Analysis.utils import filter_opto_data, get_running_valid_intervals
-from Style.style_guide import interval_style
+from ms_stim_analysis.AnalsyisTables.ms_opto_stim_protocol import OptoStimProtocol
+from .utils import filter_opto_data, get_running_valid_intervals, smooth
+from ms_stim_analysis.Style.style_guide import interval_style
 
 
 os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")

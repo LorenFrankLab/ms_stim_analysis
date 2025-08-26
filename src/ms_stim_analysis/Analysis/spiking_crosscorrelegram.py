@@ -1,5 +1,3 @@
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -15,12 +13,10 @@ from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.spikesorting.v0 import CuratedSpikeSorting
 from tqdm import tqdm
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from Analysis.position_analysis import get_running_intervals
-from Analysis.spiking_analysis import smooth
-from Analysis.utils import filter_opto_data, get_running_valid_intervals, violin_scatter
-from ms_opto_stim_protocol import OptoStimProtocol
-from Style.style_guide import interval_style
+from .spiking_analysis import smooth
+from .utils import filter_opto_data, get_running_valid_intervals, violin_scatter
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
+from ms_stim_analysis.Style.style_guide import interval_style
 
 
 def overlap_place_fields_crosscorrelegram(
@@ -46,6 +42,10 @@ def overlap_place_fields_crosscorrelegram(
     Returns:
         _type_: _description_
     """
+    raise Warning(
+        "Not used in final publication analyses in favor of peak-delay quantification"
+    )
+
     full_day_sort = False
     # get the matching epochs
     dataset = filter_opto_data(dataset_key)

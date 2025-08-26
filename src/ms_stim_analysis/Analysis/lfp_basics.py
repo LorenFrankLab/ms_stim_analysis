@@ -1,23 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-import os
-
 from spyglass.common import (
     get_electrode_indices,
 )
 from spyglass.lfp.v1 import LFPElectrodeGroup, LFPV1
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.lfp.analysis.v1 import LFPBandV1
-from ms_opto_stim_protocol import OptoStimProtocol
-from Analysis.utils import filter_opto_data
-from Analysis.lfp_analysis import get_ref_electrode_index
-from Style.style_guide import animal_style, transfection_style
-
-import sys
-
-sys.path.append("/home/sambray/Documents/MS_analysis_samsplaying/")
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
+from .utils import filter_opto_data
+from .lfp_analysis import get_ref_electrode_index
+from ms_stim_analysis.Style.style_guide import animal_style, transfection_style
 
 LFP_AMP_CUTOFF = 2000
 

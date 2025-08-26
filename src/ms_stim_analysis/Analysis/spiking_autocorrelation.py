@@ -1,20 +1,13 @@
-from spyglass.spikesorting import CuratedSpikeSorting
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-import os
-
 from spyglass.common import PositionIntervalMap
-from spyglass.common import interval_list_intersect, interval_list_contains_ind
+from spyglass.common import interval_list_contains_ind
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import OptoStimProtocol
-from spyglass.common import convert_epoch_interval_name_to_position_interval_name
-from Analysis.position_analysis import get_running_intervals, filter_position_ports
-from Analysis.utils import get_running_valid_intervals, autocorr2d, filter_opto_data
-from Analysis.spiking_analysis import smooth
-from spiking_analysis_tables import BinnedSpiking
+
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
+from .position_analysis import get_running_intervals, filter_position_ports
+from .utils import get_running_valid_intervals, autocorr2d, filter_opto_data, smooth
 
 
 def spiking_autocorrelation(
@@ -23,6 +16,9 @@ def spiking_autocorrelation(
     filter_ports: bool = True,
     auto_corr_window: int = 500,
 ):
+    raise Warning(
+        "This function not used in final publication in favor of table-based analyses"
+    )
     dataset = filter_opto_data(dataset_key)
     C_all = [[], []]
     for nwb_file_name, pos_interval_name in zip(

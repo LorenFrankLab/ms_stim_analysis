@@ -1,72 +1,27 @@
-import os
-import sys
-from typing import Tuple
-
 import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import spyglass.common as sgc
-from scipy import signal
+from tqdm import tqdm
 from spyglass.common import (
-    LFP,
-    Electrode,
-    ElectrodeGroup,
     IntervalList,
-    LabMember,
-    LabTeam,
-    LFPBand,
-    LFPBandSelection,
-    LFPSelection,
-    Nwbfile,
     PositionIntervalMap,
-    Raw,
-    Session,
     TaskEpoch,
     convert_epoch_interval_name_to_position_interval_name,
-    get_electrode_indices,
     interval_list_contains,
 )
+from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
-from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.position.v1 import TrodesPosV1
-from tqdm import tqdm
-
-from Time_and_trials.ms_interval import EpochIntervalListName
-
-from .position_analysis import filter_position_ports, get_running_intervals
-from .utils import convert_delta_marks_to_timestamp_values, smooth
-
-sys.path.append("/home/sambray/Documents/MS_analysis_samsplaying/")
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-import scipy.signal
 from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
 from spyglass.spikesorting.v0 import CuratedSpikeSorting
 
-from Analysis.circular_shuffle import (
-    bootstrap,
-    discrete_KL_divergence,
-    generate_alligned_binned_spike_func,
-    shuffled_spiking_distribution,
-    stacked_marks_to_kl,
-)
-from Analysis.spiking_place_fields import decoding_place_fields
-from Analysis.utils import (
-    convert_delta_marks_to_timestamp_values,
-    filter_animal,
-    filter_opto_data,
-    filter_task,
-    weighted_quantile,
-)
-from ms_opto_stim_protocol import (
-    OptoStimProtocol,
-    OptoStimProtocolClosedLoop,
-    OptoStimProtocolLaser,
-    OptoStimProtocolTransfected,
-)
-from spiking_analysis_tables import BinnedSpiking
+from .position_analysis import filter_position_ports, get_running_intervals
+from .utils import smooth, filter_opto_data
+from .spiking_place_fields import decoding_place_fields
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
 
 
 ##################################################################################
@@ -236,7 +191,6 @@ def opto_spiking_dynamics(
         interval_restrict = np.array(
             [[tp + plot_rng[0], tp + plot_rng[-1]] for tp in pulse_timepoints]
         )
-        from spyglass.common.common_interval import Interval
 
         interval_restrict = (
             Interval(interval_restrict, no_overlap=True).consolidate().times

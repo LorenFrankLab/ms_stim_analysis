@@ -1,26 +1,7 @@
 import numpy as np
-import pandas as pd
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
-
-import spyglass.common as sgc
 from spyglass.common import (
-    Session,
     IntervalList,
-    LabMember,
-    LabTeam,
-    Raw,
-    Session,
-    Nwbfile,
     TaskEpoch,
-    Electrode,
-    ElectrodeGroup,
-    LFP,
-    LFPSelection,
-    LFPBand,
-    LFPBandSelection,
-    get_electrode_indices,
     PositionIntervalMap,
 )
 from spyglass.position.v1 import TrodesPosV1, DLCPosV1
@@ -29,9 +10,9 @@ from spyglass.linearization.v1 import LinearizedPositionV1, TrackGraph
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 
-import sys
-from Metadata.ms_task_identification import TaskIdentification
-from Time_and_trials.ms_interval import EpochIntervalListName
+
+from ms_stim_analysis.AnalysisTables.ms_task_identification import TaskIdentification
+from ms_stim_analysis.AnalysisTables.ms_interval import EpochIntervalListName
 
 
 def get_running_intervals(

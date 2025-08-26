@@ -1,82 +1,53 @@
 from typing import Tuple
 import numpy as np
-import pandas as pd
-import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.gridspec as gridspec
-import os
 from scipy import signal
 from tqdm import tqdm
 import pywt
 import logging
 
-logger = logging.getLogger("example_logger")
-logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler("/home/sambray/Desktop/wtrack_lfp.log")
-file_handler.setLevel(logging.INFO)
-logger.addHandler(file_handler)
-
 import spyglass.common as sgc
 from spyglass.common import (
     Session,
-    IntervalList,
-    LabMember,
-    LabTeam,
-    Raw,
-    Session,
-    Nwbfile,
-    TaskEpoch,
     Electrode,
     ElectrodeGroup,
-    LFP,
-    LFPSelection,
-    LFPBand,
-    LFPBandSelection,
     get_electrode_indices,
 )
 from spyglass.common.common_interval import interval_list_intersect
 from spyglass.lfp.v1 import (
     LFPElectrodeGroup,
-    LFPSelection,
     LFPV1,
     LFPArtifactDetection,
 )
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.lfp_merge import LFPOutput
 from spyglass.lfp.analysis.v1 import LFPBandV1
-from spyglass.lfp.v1 import LFPArtifactDetection
 
 from .position_analysis import get_running_intervals, filter_position_ports
-from .utils import convert_delta_marks_to_timestamp_values
 
-from Time_and_trials.ms_interval import EpochIntervalListName
+from ms_stim_analysis.AnalysisTables.ms_interval import EpochIntervalListName
 
-import sys
-
-sys.path.append("/home/sambray/Documents/MS_analysis_samsplaying/")
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from ms_opto_stim_protocol import (
-    OptoStimProtocol,
-    OptoStimProtocolLaser,
-    OptoStimProtocolTransfected,
-    OptoStimProtocolClosedLoop,
-)
-from Analysis.utils import (
-    filter_animal,
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
+from .utils import (
     weighted_quantile,
-    filter_task,
     convert_delta_marks_to_timestamp_values,
     filter_opto_data,
 )
-from Analysis.circular_shuffle import (
+from .circular_shuffle import (
     normalize_by_index_wrapper,
-    normalize_by_peak,
     shuffled_trace_distribution,
     bootstrap,
     trace_median,
 )
-from Style.style_guide import interval_style
+from ms_stim_analysis.Style.style_guide import interval_style
+
+logger = logging.getLogger("example_logger")
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler("/home/sambray/Desktop/wtrack_lfp.log")
+file_handler.setLevel(logging.INFO)
+logger.addHandler(file_handler)
 
 
 LFP_AMP_CUTOFF = 2000
@@ -114,7 +85,9 @@ def get_yaml_defined_reference_electrode(key: dict) -> int:
 
 
 def get_ref_electrode_index(lfp_s_key: dict) -> Tuple[int, dict]:
-    """find the reference electrode index and containing lfp_electrode_group for a given lfp selection key, returns the key with the reference electrode group name added
+    """find the reference electrode index and containing lfp_electrode_group for a
+    given lfp selection key, returns the key with the reference electrode group
+    name added
 
     Parameters
     ----------
@@ -198,7 +171,7 @@ def get_control_test_power_spectrum(
     pos_interval_name: str = None,
     filter_ports: bool = False,
     return_stim_psd: bool = False,
-    dlc_pos = False,
+    dlc_pos=False,
 ) -> Tuple[list, list, list, list, list]:
     """get the power spectrum for the control (no optogenetics) and test (optogenetics) intervals
     Filters out periods of excessve LFP amplitude
@@ -239,12 +212,14 @@ def get_control_test_power_spectrum(
     key.update({"interval_list_name": pos_interval_name})
 
     # make intervals where rat is running
-    run_intervals = get_running_intervals(**key, filter_speed=filter_speed,dlc_pos=dlc_pos)
+    run_intervals = get_running_intervals(
+        **key, filter_speed=filter_speed, dlc_pos=dlc_pos
+    )
     # intersect with position-defined intervals
     if filter_ports:
         valid_position_intervals = filter_position_ports(
             {"nwb_file_name": nwb_file_name, "interval_list_name": pos_interval_name},
-            dlc_pos=dlc_pos
+            dlc_pos=dlc_pos,
         )
         if len(valid_position_intervals) == 0:
             return (
@@ -260,7 +235,9 @@ def get_control_test_power_spectrum(
 
     from .utils import get_running_valid_intervals
 
-    optogenetic_run_interval, control_run_interval = get_running_valid_intervals(key,dlc_pos=dlc_pos)
+    optogenetic_run_interval, control_run_interval = get_running_valid_intervals(
+        key, dlc_pos=dlc_pos
+    )
 
     # Begin analysis
     basic_key = {
@@ -928,7 +905,7 @@ def opto_spectrum_analysis_full_probe(
             window,
             pos_interval_name=interval_name,
             filter_ports=1,
-            dlc_pos = dlc_pos,
+            dlc_pos=dlc_pos,
         )
         if len(f_) > 0:
             f = f_.copy()
@@ -1687,338 +1664,6 @@ def lfp_per_pulse_analysis(
     if return_data:
         return fig, lfp_traces, peak_amplitudes, lfp_phase
     return fig
-
-
-# def lfp_per_pulse_analysis(
-#     dataset_key: dict,
-#     filter_name: str = "LFP 0-400 Hz",
-#     band_filter_name: str = "Theta 5-11 Hz",
-#     lfp_trace_window=(-int(0.125 * 1000), int(0.125 * 1000)),
-#     pulse_number_list=np.arange(10),
-#     fig=None,
-#     color="cornflowerblue",
-#     return_data=False,
-# ):
-#     """Generates a figure characterizing the lfp around each stimulus pulse
-
-#     Parameters
-#     ----------
-#     dataset_key : dict
-#         key containing parameters which define the dataset to analyze
-#     filter_name : str, optional
-#         which lfp filter to analyze, by default "LFP 0-400 Hz"
-#     band_filter_name : str, optional
-#         which lfp band to analyze, by default "Theta 5-11 Hz"
-#     lfp_trace_window : tuple, optional
-#         time around a pulse to includ in analysis
-#     pulse_number_list : np.ndarray, optional
-#         which pulses to include in analysis (pulse 0 is first pulse in a cycle)
-#     fig : matplotlib.figure.Figure, optional
-#         figure to plot on, by default None which creates new figure
-#     color : str, optional
-#         color to plot this dataset, by default "cornflowerblue"
-#     return_data : bool, optional
-#         whether to return the lfp traces amplitudes and phases, by default False
-
-#     Returns
-#     -------
-#     matplotlib.figure.Figure
-#         figure of power spectrum and statistics
-#     Tuple
-#         distributions of entrainment statistics (optional)
-#     """
-#     # Define the dataset (epochs included in this analyusis)
-#     dataset_table = OptoStimProtocol
-#     if "transfected" in dataset_key:
-#         dataset_table = dataset_table * OptoStimProtocolTransfected
-#     if "laser_power" in dataset_key:
-#         dataset_table = dataset_table * OptoStimProtocolLaser
-#     if "targeted_phase" in dataset_key:
-#         dataset_table = dataset_table * OptoStimProtocolClosedLoop
-#     dataset = dataset_table & dataset_key
-#     if "animal" in dataset_key:
-#         dataset = filter_animal(dataset, dataset_key["animal"])
-#     if "track_type" in dataset_key:
-#         dataset = filter_task(dataset, dataset_key["track_type"])
-#     if "min_pulse_length" in dataset_key:
-#         dataset = dataset & f"pulse_length_ms>{dataset_key['min_pulse_length']}"
-#     if "max_pulse_length" in dataset_key:
-#         dataset = dataset & f"pulse_length_ms<{dataset_key['max_pulse_length']}"
-#     print("datasets:", len(dataset))
-
-#     #################################################################
-#     # make figure
-#     if fig is None:
-#         fig = plt.figure(tight_layout=True, figsize=(6, 9))
-#         ncol = len(pulse_number_list)
-#         gs_ = gridspec.GridSpec(4, ncol)
-#         ax = []
-#         ax.append(fig.add_subplot(gs_[:2, : ncol // 2]))
-#         ax.append(fig.add_subplot(gs_[:2, ncol // 2 :]))
-#         ax_horiz = fig.add_subplot(gs_[2, :])
-#         ax_rose = [fig.add_subplot(gs_[3, i], polar=True) for i in range(ncol)]
-#     else:
-#         ax = fig.get_axes()[:2]
-#         ax_horiz = fig.get_axes()[2]
-#         ax_rose = fig.get_axes()[3:]
-#     nwb_file_name_list = dataset.fetch("nwb_file_name")
-#     interval_list_name_list = dataset.fetch("interval_list_name")
-#     # get the lfp traces for every relevant pulse
-#     lfp_traces = [[] for p in pulse_number_list]
-#     # get the lfp phase for every relevant pulse
-#     lfp_phase = [[] for p in pulse_number_list]
-#     # get the average lfp power within the window for every relevant pulse
-#     # lfp_power = [[] for p in pulse_number_list]
-#     count = 0
-#     for nwb_file_name, interval_list_name in zip(
-#         nwb_file_name_list, interval_list_name_list
-#     ):
-#         basic_key = {
-#             "nwb_file_name": nwb_file_name,
-#             "target_interval_list_name": interval_list_name,
-#             "filter_name": filter_name,
-#         }
-#         stim_key = {
-#             "nwb_file_name": nwb_file_name,
-#             "interval_list_name": interval_list_name,
-#             "dio_event_name": "stim",
-#         }
-#         band_key = {
-#             "nwb_file_name": nwb_file_name,
-#             "target_interval_list_name": interval_list_name,
-#             "filter_name": band_filter_name,
-#         }
-#         if len(LFPV1() & basic_key) == 0:
-#             print("missing LFP for: ", basic_key)
-#             continue
-#         print(basic_key)
-#         # get lfp band phase for reference electrode
-#         ref_elect, basic_key = get_ref_electrode_index(basic_key)  #
-#         # ref_elect = (Electrode() & basic_key).fetch("original_reference_electrode")[0]
-#         lfp_eseries = (LFPOutput).fetch_nwb(restriction=basic_key)[0]["lfp"]
-#         ref_index = get_electrode_indices(lfp_eseries, [ref_elect])
-
-#         # get LFP series
-#         # lfp_df = (LFPV1() & basic_key).fetch_nwb()[0]['lfp']
-#         lfp_df = (LFPV1() & basic_key).fetch1_dataframe()
-#         lfp_timestamps = lfp_df.index
-#         lfp_ = np.array(lfp_df[ref_index])
-#         # determine the stim times
-#         stim, stim_timepoints = OptoStimProtocol().get_stimulus(stim_key)
-#         ind = np.where(stim == 1)[0]
-#         stim_timepoints_ref = stim_timepoints[ind].copy()
-#         # get phase information
-#         phase_df = (LFPBandV1() & band_key).compute_signal_phase(
-#             electrode_list=[ref_elect]
-#         )
-#         phase_time = phase_df.index
-#         phase_ = np.asarray(phase_df)[:, 0]
-#         # get power information
-#         # power_df = (LFPBandV1() & band_key).compute_signal_power(
-#         #     electrode_list=[ref_elect]
-#         # )
-#         # power_time = power_df.index
-#         # print("POWER", np.mean(np.diff(power_time)))
-#         # power_ = np.asarray(power_df)[:, 0]
-
-#         # loop through pulse numbers
-#         t_new_cycle = OptoStimProtocol().get_cylcle_begin_timepoints(stim_key)
-#         lfp_norm = [1 for _ in t_new_cycle]
-#         for p, pulse_number in enumerate(pulse_number_list):
-#             stim_timepoints_new = []
-#             for ii, t in enumerate(t_new_cycle):
-#                 i = (
-#                     np.digitize(
-#                         t,
-#                         stim_timepoints_ref,
-#                     )
-#                     - 1
-#                 )
-#                 # skip if doesn't exit
-#                 if i + pulse_number >= len(stim_timepoints_ref):
-#                     continue
-#                 # skip if move into new cycle
-#                 if (
-#                     ii < len(t_new_cycle) - 1
-#                     and stim_timepoints_ref[int(i + pulse_number)] > t_new_cycle[ii + 1]
-#                 ):
-#                     continue
-#                 # add the pulse time
-#                 stim_timepoints_new.append(stim_timepoints_ref[int(i + pulse_number)])
-#                 # add lfp_trace
-#                 lfp_ind = np.argmin(
-#                     np.abs(stim_timepoints_ref[int(i + pulse_number)] - lfp_timestamps)
-#                 )
-#                 if (lfp_ind + lfp_trace_window[0] < 0) or (
-#                     lfp_ind + lfp_trace_window[1] >= lfp_.size
-#                 ):
-#                     continue
-#                 # normalize by the peak value of the first pulse window
-#                 if lfp_norm[ii] == 1:
-#                     lfp_norm[ii] = np.abs(
-#                         lfp_[
-#                             lfp_ind
-#                             + lfp_trace_window[0] : lfp_ind
-#                             + lfp_trace_window[1]
-#                         ]
-#                     ).max()
-#                 # nan out segments with large noise
-#                 if (
-#                     np.abs(
-#                         lfp_[
-#                             lfp_ind
-#                             + lfp_trace_window[0] : lfp_ind
-#                             + lfp_trace_window[1]
-#                         ]
-#                     ).max()
-#                     > 1000
-#                 ):
-#                     lfp_norm[ii] = np.nan
-#                 lfp_traces[p].append(
-#                     lfp_[lfp_ind + lfp_trace_window[0] : lfp_ind + lfp_trace_window[1]]
-#                     / lfp_norm[ii]
-#                 )
-#                 lfp_time_seg = (
-#                     lfp_timestamps[
-#                         lfp_ind + lfp_trace_window[0] : lfp_ind + lfp_trace_window[1]
-#                     ]
-#                     - lfp_timestamps[lfp_ind]
-#                 )
-#                 # lfp phase
-#                 ind_phase = np.digitize(
-#                     stim_timepoints_ref[int(i + pulse_number)], phase_time
-#                 )
-#                 lfp_phase[p].append(phase_[ind_phase])
-#                 # # lfp power
-#                 # ind_power = np.digitize(
-#                 #     stim_timepoints_ref[int(i + pulse_number)], power_time
-#                 # )
-#                 # lfp_power[p].append(
-#                 #     np.mean(
-#                 #         power_[
-#                 #             ind_power
-#                 #             + lfp_trace_window[0] : ind_power
-#                 #             + lfp_trace_window[1]
-#                 #         ]
-#                 #     )
-#                 # )
-#         count += 1
-#         if count > 3:
-#             break
-#     if len(lfp_traces[0]) == 0:
-#         if return_data:
-#             return fig, lfp_traces, peak_amplitudes, lfp_phase
-#         return fig
-
-#     # calculate statistics
-#     peak_rng = np.where((lfp_time_seg * 1000 > -125) & (lfp_time_seg * 1000 < 125))[0]
-#     # avg_trace
-#     arr = [
-#         np.nanmedian(np.array(lfp_traces[i]), axis=0)
-#         for i in range(len(pulse_number_list))
-#     ]
-#     lo = [
-#         np.nanpercentile(np.array(lfp_traces[i]), 25, axis=0)
-#         for i in range(len(pulse_number_list))
-#     ]
-#     hi = [
-#         np.nanpercentile(np.array(lfp_traces[i]), 75, axis=0)
-#         for i in range(len(pulse_number_list))
-#     ]
-#     # peak_amplitudes = [np.max(np.squeeze(np.array(lfp_traces[i])[:,peak_rng]),axis=1) for i in pulse_number_list]
-#     peak_amplitudes = [
-#         np.nanpercentile(
-#             np.squeeze(np.abs(np.array(lfp_traces[i])[:, peak_rng])), 99, axis=1
-#         )
-#         for i in range(len(pulse_number_list))
-#     ]
-#     # peak_amplitudes = [x / np.median(lfp_power[0]) for x in lfp_power]
-#     # plot traces
-#     lo = lo / np.max(np.abs(arr)) * 0.5
-#     hi = hi / np.max(np.abs(arr)) * 0.5
-#     arr = arr / np.max(np.abs(arr)) * 0.5
-#     for loc, i in enumerate(pulse_number_list):
-#         ax[0].plot(lfp_time_seg * 1000, arr[loc] - loc, c=color, alpha=0.9, lw=2)
-#         ax[0].fill_between(
-#             lfp_time_seg * 1000,
-#             np.squeeze(lo[loc]) - loc,
-#             np.squeeze(hi[loc]) - loc,
-#             facecolor=color,
-#             alpha=0.1,
-#         )
-#     # plot peak amplitudes
-#     bins = np.linspace(0, 2, 30)  # np.linspace(100,1000,30)
-#     plot_x = (bins[1:] + bins[:-1]) / 2
-#     plot_base = np.zeros(bins.size - 1)
-#     for loc, i in enumerate(pulse_number_list):
-#         val, _ = np.histogram(peak_amplitudes[loc], bins)
-#         val = val / np.sum(val)
-#         val = val / np.max(val) * 1.1
-
-#         ax[1].fill_between(
-#             plot_x, plot_base - loc, val - loc, facecolor=color, alpha=0.4
-#         )
-#         ax[1].plot(plot_x, plot_base - loc, c=color, lw=1, alpha=0.5)
-#         ax[1].plot(plot_x, val - loc, c=color, lw=1, alpha=0.5)
-#         ax[1].scatter(np.nanmedian(peak_amplitudes[loc]), -loc, color=color)
-
-#         shift = 0
-#         ax_horiz.scatter(
-#             [loc + 0.1 * shift], np.nanmedian(peak_amplitudes[loc]), color=color
-#         )
-#         ax_horiz.plot(
-#             [loc + 0.1 * shift, loc + 0.1 * shift],
-#             [
-#                 np.nanpercentile(peak_amplitudes[loc], 25),
-#                 np.nanpercentile(peak_amplitudes[loc], 75),
-#             ],
-#             color=color,
-#         )
-#     # plot rose plots of stim phase
-#     for a, pulse_phase in zip(ax_rose, lfp_phase):
-#         freq, theta = np.histogram(pulse_phase, bins=50)
-#         freq = freq / freq.sum()
-#         theta = (theta[1:] + theta[:-1]) / 2
-#         width = np.radians(360 / len(theta))
-#         a.bar(
-#             theta,
-#             freq,
-#             width=width,
-#             facecolor=color,
-#             edgecolor=color,
-#             alpha=0.4,
-#             align="edge",
-#         )
-#         a.set_yticklabels([])
-#         a.set_xticklabels([])
-#         # ax.plot([0,mean_angle],[0,freq.max()*r])
-
-#     if len(pulse_number_list) > 1:
-#         ax[0].set_ylabel("train number")
-#         ax[0].set_yticks(
-#             -np.arange(len(pulse_number_list)),
-#         )
-#         ax[0].set_yticklabels(pulse_number_list)
-#     else:
-#         plt.ylabel("normalized LFP")
-#     ax[0].set_xlabel("time (ms)")  # relative to first train pulse (ms)',fontsize=8)
-#     ax[0].spines[["right", "top"]].set_visible(False)
-#     ax_horiz.spines[["right", "top"]].set_visible(False)
-#     ax[1].spines[["right", "top", "left"]].set_visible(False)
-#     ax[0].set_xlim(lfp_time_seg[0] * 1000, lfp_time_seg[-1] * 1000)
-#     ax[0].set_ylim(-pulse_number_list.size - 0.1, 1.2)
-#     ax[1].set_xlabel("normalized peak LFP amplitude")
-
-#     ax_horiz.set_xlabel("pulse_number")
-#     ax_horiz.set_ylabel("normalized peak LFP amplitude")
-
-#     plt.rcParams["svg.fonttype"] = "none"
-#     plt.gcf().subplots_adjust(bottom=0.15)
-#     plt.gcf().subplots_adjust(left=0.5)
-
-#     if return_data:
-#         return fig, lfp_traces, peak_amplitudes, lfp_phase
-#     return fig
 
 
 def lfp_power_dynamics_pulse_hilbert(
