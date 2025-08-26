@@ -11,7 +11,6 @@ from .utils import (
     get_running_valid_intervals,
 )
 
-
 from .lfp_analysis import get_ref_electrode_index
 
 

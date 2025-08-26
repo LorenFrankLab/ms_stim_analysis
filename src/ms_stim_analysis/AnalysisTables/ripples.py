@@ -2,14 +2,11 @@ import numpy as np
 import datajoint as dj
 
 from spyglass.lfp.v1 import LFPV1
-from spyglass.ripple.v1 import RippleTimesV1, RippleParameters
+from spyglass.ripple.v1 import RippleTimesV1
 from spyglass.common import IntervalList, get_electrode_indices
 from spyglass.utils.dj_mixin import SpyglassMixin
 
-import os
-
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
-from Analysis.lfp_analysis import get_ref_electrode_index
+from ms_stim_analysis.Analysis.lfp_analysis import get_ref_electrode_index
 
 schema = dj.schema("ms_ripple")
 

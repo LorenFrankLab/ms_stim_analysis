@@ -1,5 +1,3 @@
-import os
-
 import datajoint as dj
 import numpy as np
 import pandas as pd
@@ -8,20 +6,15 @@ from tqdm import tqdm
 from spyglass.common import (
     AnalysisNwbfile,
     IntervalList,
-    Session,
     interval_list_contains,
     interval_list_contains_ind,
     interval_list_intersect,
     convert_epoch_interval_name_to_position_interval_name,
 )
 from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
-from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
-from spyglass.utils.dj_mixin import SpyglassMixin, SpyglassMixinPart
-from Analysis.utils import get_running_valid_intervals
-
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
-from Analysis.utils import parse_unit_ids
-from Analysis.spiking_analysis import smooth
+from spyglass.utils.dj_mixin import SpyglassMixin
+from ms_stim_analysis.Analysis.utils import get_running_valid_intervals, parse_unit_ids
+from ms_stim_analysis.Analysis.spiking_analysis import smooth
 
 schema = dj.schema("ms_cross_correlations")
 
@@ -131,7 +124,7 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
         if filter_speed or filter_ports:
             # get the running intervals
             pos_interval = convert_epoch_interval_name_to_position_interval_name(
-                (IntervalList & key).fetch1("KEY"),populate_missing=False
+                (IntervalList & key).fetch1("KEY"), populate_missing=False
             )
             if not pos_interval or pos_interval is None:
                 pos_interval = key["interval_list_name"].split("_")[0]

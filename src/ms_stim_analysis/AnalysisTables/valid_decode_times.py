@@ -1,14 +1,13 @@
 import datajoint as dj
 import numpy as np
-import os
 
 from spyglass.common import interval_list_contains
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.utils.dj_mixin import SpyglassMixin
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
-from Analysis.utils import get_running_valid_intervals
-from ms_opto_stim_protocol import OptoStimProtocol
+
+from ms_stim_analysis.Analysis.utils import get_running_valid_intervals
+from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
 
 schema = dj.schema("ms_valid_decodes")
 

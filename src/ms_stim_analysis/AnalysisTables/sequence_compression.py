@@ -1,5 +1,6 @@
 import datajoint as dj
 import numpy as np
+import os
 import pandas as pd
 from scipy.signal import find_peaks
 from scipy.stats import pearsonr
@@ -10,12 +11,11 @@ from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
 from spyglass.utils.dj_mixin import SpyglassMixin
 
-import os
+
+from ms_stim_analysis.Analysis.utils import get_running_valid_intervals, smooth
+
 
 os.environ["JAX_PLATFORM_NAME"] = "cpu"
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
-from Analysis.utils import get_running_valid_intervals, smooth
-
 
 schema = dj.schema("sambray_compression_index")
 

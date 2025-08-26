@@ -1,19 +1,19 @@
+import datajoint as dj
+import numpy as np
+
+
+from ms_stim_analysis.AnalysisTables.ms_dio_event import ProcessedDioEvents
+from ms_stim_analysis.AnalysisTables.ms_task_performance import (
+    AlternationTaskPerformance,
+)
+from ms_stim_analysis.Analysis.position_analysis import filter_position_ports
+
+from spyglass.utils.dj_mixin import SpyglassMixin
+from spyglass.common import interval_list_intersect
+
 import warnings
 
 warnings.filterwarnings("ignore")
-import datajoint as dj
-import numpy as np
-import os
-
-
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from Analysis.position_analysis import filter_position_ports
-from Task_event.ms_task_performance import AlternationTaskPerformance
-from Task_event.ms_dio_event import ProcessedDioEvents
-
-from spyglass.utils.dj_mixin import SpyglassMixin
-from spyglass.position import PositionOutput
-from spyglass.common import interval_list_intersect
 
 schema = dj.schema("ms_trial_intervals")
 

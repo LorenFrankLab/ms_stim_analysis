@@ -11,13 +11,17 @@ from spyglass.common import (
     TaskEpoch,
     convert_epoch_interval_name_to_position_interval_name,
     interval_list_contains,
+    interval_list_intersect,
 )
 from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
+from spyglass.lfp.analysis.v1 import LFPBandV1
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
 from spyglass.spikesorting.v0 import CuratedSpikeSorting
 
+from .circular_shuffle import shuffled_spiking_distribution
+from .lfp_analysis import get_ref_electrode_index
 from .position_analysis import filter_position_ports, get_running_intervals
 from .utils import smooth, filter_opto_data
 from .spiking_place_fields import decoding_place_fields
@@ -1416,13 +1420,6 @@ def spatial_information_rate(
     # total_rate = spike_counts.sum() / occupancy.sum()
     # return np.nansum(p_loc * spike_rate * np.log2(spike_rate / total_rate))
     # return np.nansum(spike_rate * np.log2(spike_rate))
-
-
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying/")
-from spyglass.common import interval_list_intersect
-from spyglass.lfp.analysis.v1 import LFPBandV1
-
-from Analysis.lfp_analysis import get_ref_electrode_index
 
 
 def get_theta_peaks(key):

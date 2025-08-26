@@ -6,8 +6,7 @@ import non_local_detector.analysis as analysis
 from .place_fields import TrackCellCoverage
 import os
 
-os.chdir("/home/sambray/Documents/MS_analysis_samsplaying")
-from Analysis.utils import smooth
+from ms_sim_analysis.Analysis.utils import smooth
 
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
 from spyglass.common import AnalysisNwbfile, interval_list_intersect
@@ -431,7 +430,7 @@ class ContinuousRippleTraversal(SpyglassMixin, dj.Computed):
 
 
 @schema
-class BadDecodes(dj.Computed):
+class BadDecodes(SpyglassMixin, dj.Computed):
     definition = """
     -> ClusterlessDecodingV1
     ---
