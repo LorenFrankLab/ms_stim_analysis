@@ -10,7 +10,7 @@ from spyglass.utils.dj_mixin import SpyglassMixin
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.common import AnalysisNwbfile
 
-from ms_opto_stim_protocol import OptoStimProtocol
+from .ms_opto_stim_protocol import OptoStimProtocol
 
 schema = dj.schema("ms_credible_interval")
 
