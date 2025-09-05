@@ -27,6 +27,8 @@ from .utils import smooth, filter_opto_data
 from .spiking_place_fields import decoding_place_fields
 from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
 
+from .circular_shuffle import discrete_KL_divergence, stacked_marks_to_kl, bootstrap
+
 
 ##################################################################################
 def bin_spikes_around_marks(spikes, marks, bins):

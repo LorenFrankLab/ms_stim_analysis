@@ -6,7 +6,7 @@ import non_local_detector.analysis as analysis
 from .place_fields import TrackCellCoverage
 import os
 
-from ms_sim_analysis.Analysis.utils import smooth
+from ms_stim_analysis.Analysis.utils import smooth
 
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
 from spyglass.common import AnalysisNwbfile, interval_list_intersect

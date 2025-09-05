@@ -94,6 +94,9 @@ def individual_lfp_traces(
         if band_filter_name is not None:
             band_key = basic_key.copy()
             band_key["filter_name"] = "Theta 5-11 Hz"
+            band_key = (LFPBandV1() & band_key).fetch("KEY")[
+                0
+            ]  # account for different artifact filters in database
             band_df = (LFPBandV1() & band_key).fetch1_dataframe()
             band_ = np.array(band_df[ref_index])
             band_timestamps = band_df.index

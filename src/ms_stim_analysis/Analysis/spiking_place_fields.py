@@ -2,8 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from spyglass.common import PositionIntervalMap, TaskEpoch
 
-# from spyglass.spikesorting.spiksorti import SpikeSortingOutput
-from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1,
+from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 
 from .utils import filter_opto_data, violin_scatter
 
@@ -99,7 +98,9 @@ def decoding_place_fields(
             encoding = encoding[list(encoding.keys())[0]]
             p_loc = encoding["occupancy"]
             p_loc = p_loc / p_loc.sum()
-            from Analysis.spiking_analysis import spatial_information_rate
+            from ms_stim_analysis.Analysis.spiking_analysis import (
+                spatial_information_rate,
+            )
 
             place = list(
                 (
