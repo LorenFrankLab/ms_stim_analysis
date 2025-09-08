@@ -57,3 +57,34 @@ We also plan to release a Docker image that includes:
 - [ndx-optogenetics](https://github.com/rly/ndx-optogenetics): NWB extension for representing optogenetic stimulation protocols and metadata.
 
 - [ndx-franklab-novela](https://github.com/LorenFrankLab/ndx-franklab-novela): Frank Lab–specific NWB extension for storing lab-specific data in NWB/DANDI.
+
+| Figure | Panel | Notebook |
+| ------ | ----- | -------- |
+| 1 | D | [opto_stimResponse_analysis.ipynb](notebooks/LFP/opto_stimResponse_analysis.ipynb) |
+|  | E | [opto_powerSpectrum_analysis.ipynb](notebooks/LFP/opto_powerSpectrum_analysis.ipynb) |
+|  | F | [opto_powerSpectrum_analysis.ipynb](notebooks/LFP/opto_powerSpectrum_analysis.ipynb) |
+|  | G | [opto_stimResponse_analysis.ipynb](notebooks/LFP/opto_stimResponse_analysis.ipynb) |
+|  | H | [opto_powerSpectrum_closedLoop_analysis.ipynb](notebooks/LFP/opto_powerSpectrum_closedLoop_analysis.ipynb) |
+|  | I | [opto_powerSpectrum_closedLoop_analysis.ipynb](notebooks/LFP/opto_powerSpectrum_closedLoop_analysis.ipynb) |
+| 2 | B | [opto_spiking_response.ipynb](notebooks/Spiking/opto_spiking_response.ipynb) |
+|  | C | [mua_response.ipynb](notebooks/Spiking/mua_response.ipynb) |
+|  | D | [peak_delay_timescales_lineartrack.ipynb](notebooks/Spiking/peak_delay_timescales_lineartrack.ipynb) |
+|  | E | [Fig2E.ipynb](notebooks/Spiking/Fig2E.ipynb) |
+|  | F | [place_field_table_plots.ipynb](notebooks/Spiking/place_field_table_plots.ipynb) |
+|  | G | [place_field_table_plots.ipynb](notebooks/Spiking/place_field_table_plots.ipynb) |
+| 3 | A | [learning_curves.ipynb](notebooks/Behavior/learning_curves.ipynb) |
+|  | B | [learning_curves.ipynb](notebooks/Behavior/learning_curves.ipynb) |
+|  | C | [learning_curves.ipynb](notebooks/Behavior/learning_curves.ipynb) |
+|  | D | [learning_curves.ipynb](notebooks/Behavior/learning_curves.ipynb) |
+|  | E | [outbound_error_repeats.ipynb](notebooks/Behavior/outbound_error_repeats.ipynb) |
+|  | F | [choice_point_occupancy.ipynb](notebooks/Positions/choice_point_occupancy.ipynb) |
+|  | F | [speed_distributions.ipynb](notebooks/Positions/speed_distributions.ipynb) |
+| 4 | A | [wtrack_examples_first_epoch.ipynb](notebooks/Decoding/wtrack_examples_first_epoch.ipynb) |
+|  | B | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
+|  | C | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
+|  | D | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
+|  | E | [wtrack_examples_first_epoch.ipynb](notebooks/Decoding/wtrack_examples_first_epoch.ipynb) |
+|  | F | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
+|  | G | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
+|  | H | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
+|  | I | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
