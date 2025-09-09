@@ -58,6 +58,8 @@ We also plan to release a Docker image that includes:
 
 - [ndx-franklab-novela](https://github.com/LorenFrankLab/ndx-franklab-novela): Frank Lab–specific NWB extension for storing lab-specific data in NWB/DANDI.
 
+### Code Directory
+
 | Figure | Panel | Notebook |
 | ------ | ----- | -------- |
 | 1 | D | [opto_stimResponse_analysis.ipynb](notebooks/LFP/opto_stimResponse_analysis.ipynb) |
@@ -88,3 +90,19 @@ We also plan to release a Docker image that includes:
 |  | G | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
 |  | H | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
 |  | I | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
+| 5 | A | [continuous_traversals.ipynb](notebooks/Decoding/continuous_traversals.ipynb) |
+|  | A | [continuous_traversals_first_epoch.ipynb](notebooks/Decoding/continuous_traversals_first_epoch.ipynb) |
+|  | B | [opto_ripple_analysis_difference.ipynb](notebooks/Ripples/opto_ripple_analysis_difference.ipynb) |
+|  | C | [ripple_decodes.ipynb](notebooks/Ripples/ripple_decodes.ipynb) |
+|  | D | [replay_decode_speed.ipynb](notebooks/Ripples/replay_decode_speed.ipynb) |
+| S1 | * | [opto_powerSpectrum_analysis.ipynb](notebooks/LFP/opto_powerSpectrum_analysis.ipynb) |
+| S2 | A | [supplement_rose_plot.ipynb](notebooks/LFP/supplement_rose_plot.ipynb) |
+|  | B | [stim_field_interaction.ipynb](notebooks/Spiking/stim_field_interaction.ipynb) |
+| S3 | A | [clusterless_decode_stim_response.ipynb](notebooks/Decoding/clusterless_decode_stim_response.ipynb) |
+|  | B | [peak_delay_timescales.ipynb](notebooks/Spiking/peak_delay_timescales.ipynb) |
+|  | C | [peak_delay_timescales.ipynb](notebooks/Spiking/peak_delay_timescales.ipynb) |
+|  | D | [peak_delay_timescales.ipynb](notebooks/Spiking/peak_delay_timescales.ipynb) |
+|  | E | [peak_delay_timescales.ipynb](notebooks/Spiking/peak_delay_timescales.ipynb) |
+|  | F | [place_field_table_plots.ipynb](notebooks/Spiking/place_field_table_plots.ipynb) |
+|  | G | [decoding_stim_max_ahead_behind_choice_point.ipynb](notebooks/Decoding/decoding_stim_max_ahead_behind_choice_point.ipynb)|
+| S4 | * | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
