@@ -1,0 +1,956 @@
+#<wTrack0.sc>
+#% PROGRAM NAME: 	wTrack
+#% DESCRIPTION:	3 arm w track task
+#
+#int deliverPeriod= 300   	% how long to deliver the reward
+#int rewardWell=0
+#int dio=0
+#int homeRewards=0
+#int outerRewards=0
+#int animal=0
+#;
+#
+#% function to deliver reward
+#function 1
+#	portout[rewardWell]=1 % reward
+#	do in deliverPeriod 
+#		portout[rewardWell]=0 % reset reward
+#	end	
+#end;
+#
+#% function to turn on output
+#function 2	
+#        portout[dio]=1
+#end;
+#
+#% function to turn off output
+#function 3	
+#	portout[dio]=0	
+#end;
+#
+#%display status
+#function 4
+#	disp(animal)
+#	disp(homeRewards)
+#	disp(outerRewards)
+#end;
+#
+#% CALLBACKS -- EVENT-DRIVEN TRIGGERS
+#callback portin[1] up
+#	disp('UP 1')
+#end;
+#
+#callback portin[1] down
+#	disp('DOWN 1')
+#end;
+#
+#callback portin[2] up
+#	disp('UP 2')
+#end;
+#
+#callback portin[2] down
+#	disp('DOWN 2')
+#end;
+#
+#callback portin[3] up
+#	disp('UP 3')
+#end;
+#
+#callback portin[3] down
+#	disp('DOWN 3')
+#end;
+#
+#<wTrack0.py>
+#import math
+#import struct
+#import re
+#import time
+#import numpy as np
+#from tkinter import *
+#import smtplib
+#
+#def pokeIn(dio):
+#    global armWells
+#    currWell = int(dio[1])
+#    for num in range(len(armWells)):
+#        if currWell == armWells[num]:
+#            doTrack(num)
+#
+#def pokeOut(dio):
+#    global armWells
+#    currWell = int(dio[1])
+#    for num in range(len(armWells)):
+#        if currWell == armWells[num]:
+#            endTrack(num)
+#
+#def doTrack(val):
+#    global armWells
+#    global wArms
+#    global armPumps
+#    global lastArm
+#    global lastOuter
+#    global homeRewards
+#    global outerRewards
+#    if lastArm == -1:
+#       pass
+#    if lastArm != val:
+#        if val == (wArms[1]-1):
+#            homeRewards+=1
+#            deliverReward(val)
+#        if val == (wArms[0]-1) or val == (wArms[2]-1):
+#            if val != lastOuter and lastArm == (wArms[1]-1):
+#                outerRewards+=1
+#                deliverReward(val)
+#            lastOuter=val
+#    lastArm = val
+#        
+#
+#def deliverReward(val):
+#    global armPumps
+#    global Animals
+#    global homeRewards
+#    global outerRewards
+#    print("SCQTMESSAGE: rewardWell = "+str(armPumps[val])+";\n")
+#    print("SCQTMESSAGE: trigger(1);\n")
+#
+#    print("SCQTMESSAGE: homeRewards = "+str(homeRewards)+";\n")
+#    print("SCQTMESSAGE: outerRewards = "+str(outerRewards)+";\n")
+#    print("SCQTMESSAGE: animal = "+str(Animals[0])+";\n")
+#    print("SCQTMESSAGE: trigger(4);\n")
+#
+#def endTrack(val):
+#    global armWells
+#    global wArms
+#    global homeRewards
+#    global maxTrials
+#
+#    if homeRewards == maxTrials and lastArm != (wArms[1]-1):
+#    	endSession()
+#
+#def endSession():
+#    pass
+#
+#
+## This function MUST BE NAMED 'callback'!!!!
+#def callback(line):
+#
+#    # This is the custom callback function. When events occur, addScQtEvent will
+#    # call this function.
+#    if line.find("UP") >= 0: #input triggered
+#        pokeIn(re.findall(r'\d+',line))
+#
+#    if line.find("DOWN") >= 0: #input released
+#        pokeOut(re.findall(r'\d+',line))
+#
+##w-track arms wells
+#armWells = [1, 2, 3]
+#
+##w-track arms [outer, home, outer] on a set of [1,6]
+#wArms= [1, 2, 3]
+#
+##w-track arm pumps:
+#armPumps = [4, 5, 6]
+#
+##global variables
+#lastArm = -1
+#homeRewards = 0
+#outerRewards = 0
+#maxTrials = 5000
+#lastOuter=-1
+#
+##Animal numbers, to be update for each set of animals
+#Animals=[1]
+#
+#def finish():
+#    global Animals
+#    global armWells
+#    global maxTrials
+#    global wArms
+#    Animals[0]=int(E1.get())
+#    maxTrials=int(E10.get())
+#
+#    display.destroy()
+#
+#    for num in armWells:
+#        print("SCQTMESSAGE: dio = "+str(num)+";\n")
+#        print("SCQTMESSAGE: trigger(3);\n")
+#
+#savingDisp = Tk()
+#
+#advance=0
+#
+#def yesSaving():
+#    global advance
+#    savingDisp.destroy()
+#    advance=1
+#
+#def noSaving():
+#    savingDisp.destroy()
+#
+#saveFrame1 = Frame(savingDisp)
+#saveFrame1.pack(side = TOP)
+#
+#saveFrame2 = Frame(savingDisp)
+#saveFrame2.pack(side = BOTTOM)
+#
+#LS0 = Label(saveFrame1, text="have you saved your data?")
+#LS0.pack()
+#
+#B1 = Button(saveFrame2, text ="Yes", command = yesSaving)
+#B1.pack(side = LEFT)
+#
+#B2 = Button(saveFrame2, text ="No", command = noSaving)
+#B2.pack(side = LEFT)
+#
+#savingDisp.mainloop()
+#
+#if advance:
+#    display = Tk()
+#
+#    frame1 = Frame(display)
+#    frame1.pack(side = TOP)
+#
+#    frame2 = Frame(display)
+#    frame2.pack(side = TOP)
+#
+#    frame3 = Frame(display)
+#    frame3.pack(side = BOTTOM )
+#
+#    L1 = Label(frame1, text="animal #:")
+#    L1.pack(side = LEFT)
+#    E1 = Entry(frame1, bd = 3, width = 3)
+#    E1.pack(side = LEFT)
+#    E1.insert(0,str(Animals[0]))
+#    
+#    varA1 = IntVar()
+#    L10 = Label(frame1, text="trials:")
+#    L10.pack(side = LEFT)
+#    E10 = Entry(frame1, bd = 3, width = 5)
+#    E10.pack(side = LEFT)
+#    E10.insert(0,str(maxTrials))
+#
+#
+#    cbL2=Label(frame2, text="    ")
+#    cbL2.pack()
+#
+#    B = Button(frame3, text ="Go", command = finish)
+#
+#    B.pack(side = BOTTOM)
+#
+#    display.mainloop()
+#
+5307744 UP 3
+5307744 4 0
+5308774 DOWN 3
+5308774 0 0
+5329277 UP 2
+5329277 2 0
+~~~
+~~~
+5329302 2 16
+~~~
+~~~
+~~~
+5329307 animal = 1
+5329308 homeRewards = 5
+5329308 outerRewards = 1
+~~~
+5329534 DOWN 2
+5329534 0 16
+5329536 UP 2
+5329536 2 16
+5329602 2 0
+5333739 DOWN 2
+5333739 0 0
+5333754 UP 2
+5333754 2 0
+5333910 DOWN 2
+5333910 0 0
+5333926 UP 2
+5333926 2 0
+5334078 DOWN 2
+5334078 0 0
+5334094 UP 2
+5334094 2 0
+5334417 DOWN 2
+5334417 0 0
+5334428 UP 2
+5334428 2 0
+5337314 DOWN 2
+5337314 0 0
+5339757 UP 2
+5339757 2 0
+5340022 DOWN 2
+5340022 0 0
+5357028 UP 1
+5357028 1 0
+~~~
+~~~
+5357067 1 8
+~~~
+~~~
+~~~
+5357072 animal = 1
+5357072 homeRewards = 5
+5357073 outerRewards = 2
+~~~
+5357367 1 0
+5370225 DOWN 1
+5370225 0 0
+5371414 UP 1
+5371414 1 0
+5371510 DOWN 1
+5371510 0 0
+5371557 UP 1
+5371556 1 0
+5371584 DOWN 1
+5371584 0 0
+5371815 UP 1
+5371815 1 0
+5373882 DOWN 1
+5373882 0 0
+5425558 UP 2
+5425558 2 0
+~~~
+~~~
+5425591 2 16
+~~~
+~~~
+~~~
+5425596 animal = 1
+5425597 homeRewards = 6
+5425597 outerRewards = 2
+~~~
+5425872 DOWN 2
+5425872 0 16
+5425876 UP 2
+5425876 2 16
+5425878 DOWN 2
+5425878 0 16
+5425891 0 0
+5425905 UP 2
+5425905 2 0
+5429370 DOWN 2
+5429370 0 0
+5429377 UP 2
+5429377 2 0
+5429541 DOWN 2
+5429541 0 0
+5429545 UP 2
+5429545 2 0
+5429710 DOWN 2
+5429710 0 0
+5429722 UP 2
+5429722 2 0
+5432721 DOWN 2
+5432721 0 0
+5433034 UP 2
+5433034 2 0
+5433050 DOWN 2
+5433050 0 0
+5461966 UP 3
+5461966 4 0
+~~~
+~~~
+5461995 4 32
+~~~
+~~~
+~~~
+5462000 animal = 1
+5462001 homeRewards = 6
+5462001 outerRewards = 3
+~~~
+5462295 4 0
+5469532 DOWN 3
+5469532 0 0
+5469552 UP 3
+5469552 4 0
+5469699 DOWN 3
+5469699 0 0
+5469726 UP 3
+5469726 4 0
+5469848 DOWN 3
+5469848 0 0
+5469929 UP 3
+5469929 4 0
+5469955 DOWN 3
+5469955 0 0
+5469973 UP 3
+5469973 4 0
+5470279 DOWN 3
+5470279 0 0
+5471623 UP 3
+5471623 4 0
+5475095 DOWN 3
+5475095 0 0
+5478743 UP 3
+5478743 4 0
+5478922 DOWN 3
+5478922 0 0
+5489203 UP 1
+5489203 1 0
+5490424 DOWN 1
+5490424 0 0
+5528933 UP 3
+5528933 4 0
+5530596 DOWN 3
+5530596 0 0
+5534443 UP 3
+5534443 4 0
+5534680 DOWN 3
+5534680 0 0
+5534816 UP 3
+5534816 4 0
+5536617 DOWN 3
+5536617 0 0
+5549550 UP 2
+5549550 2 0
+~~~
+~~~
+5549581 2 16
+~~~
+~~~
+~~~
+5549586 animal = 1
+5549587 homeRewards = 7
+5549587 outerRewards = 3
+~~~
+5549691 DOWN 2
+5549691 0 16
+5549747 UP 2
+5549747 2 16
+5549881 2 0
+5555076 DOWN 2
+5555076 0 0
+5555114 UP 2
+5555114 2 0
+5555169 DOWN 2
+5555169 0 0
+5555266 UP 2
+5555266 2 0
+5555282 DOWN 2
+5555282 0 0
+5577721 UP 3
+5577721 4 0
+5577822 DOWN 3
+5577822 0 0
+5577832 UP 3
+5577832 4 0
+5578517 DOWN 3
+5578517 0 0
+5605824 UP 2
+5605824 2 0
+~~~
+~~~
+5605857 2 16
+~~~
+~~~
+~~~
+5605862 animal = 1
+5605863 homeRewards = 8
+5605863 outerRewards = 3
+~~~
+5606157 2 0
+5606161 DOWN 2
+5606161 0 0
+5606184 UP 2
+5606184 2 0
+5611199 DOWN 2
+5611199 0 0
+5611207 UP 2
+5611207 2 0
+5611225 DOWN 2
+5611225 0 0
+5611242 UP 2
+5611242 2 0
+5611292 DOWN 2
+5611292 0 0
+5611335 UP 2
+5611335 2 0
+5611468 DOWN 2
+5611468 0 0
+5611478 UP 2
+5611478 2 0
+5612138 DOWN 2
+5612138 0 0
+5612146 UP 2
+5612146 2 0
+5613654 DOWN 2
+5613654 0 0
+5644220 UP 1
+5644220 1 0
+~~~
+~~~
+5644251 1 8
+~~~
+~~~
+~~~
+5644256 animal = 1
+5644257 homeRewards = 8
+5644257 outerRewards = 4
+~~~
+5644551 1 0
+5644638 DOWN 1
+5644638 0 0
+5644644 UP 1
+5644644 1 0
+5655771 DOWN 1
+5655771 0 0
+5708986 UP 2
+5708986 2 0
+~~~
+~~~
+5709016 2 16
+~~~
+~~~
+~~~
+5709021 animal = 1
+5709022 homeRewards = 9
+5709022 outerRewards = 4
+~~~
+5709267 DOWN 2
+5709267 0 16
+5709281 UP 2
+5709281 2 16
+5709316 2 0
+5709548 DOWN 2
+5709548 0 0
+5709563 UP 2
+5709563 2 0
+5713221 DOWN 2
+5713221 0 0
+5713229 UP 2
+5713229 2 0
+5713389 DOWN 2
+5713389 0 0
+5713394 UP 2
+5713394 2 0
+5714609 DOWN 2
+5714609 0 0
+5714636 UP 2
+5714636 2 0
+5714743 DOWN 2
+5714743 0 0
+5726223 UP 1
+5726223 1 0
+5727439 DOWN 1
+5727439 0 0
+5727525 UP 1
+5727525 1 0
+5727534 DOWN 1
+5727534 0 0
+5728600 UP 1
+5728600 1 0
+5728651 DOWN 1
+5728651 0 0
+5728709 UP 1
+5728709 1 0
+5729985 DOWN 1
+5729985 0 0
+5769297 UP 3
+5769297 4 0
+5769740 DOWN 3
+5769740 0 0
+5769745 UP 3
+5769745 4 0
+5771460 DOWN 3
+5771460 0 0
+5771497 UP 3
+5771497 4 0
+5771612 DOWN 3
+5771612 0 0
+5771934 UP 3
+5771934 4 0
+5772011 DOWN 3
+5772011 0 0
+5781905 UP 2
+5781905 2 0
+~~~
+~~~
+5781932 2 16
+~~~
+~~~
+~~~
+5781937 animal = 1
+5781938 homeRewards = 10
+5781938 outerRewards = 4
+~~~
+5782232 2 0
+5782550 DOWN 2
+5782550 0 0
+5782567 UP 2
+5782567 2 0
+5787656 DOWN 2
+5787656 0 0
+5799211 UP 1
+5799211 1 0
+~~~
+~~~
+5799248 1 8
+~~~
+~~~
+~~~
+5799254 animal = 1
+5799254 homeRewards = 10
+5799255 outerRewards = 5
+~~~
+5799548 1 0
+5799612 DOWN 1
+5799612 0 0
+5799617 UP 1
+5799617 1 0
+5810655 DOWN 1
+5810655 0 0
+5813739 UP 1
+5813739 1 0
+5814030 DOWN 1
+5814030 0 0
+5814177 UP 1
+5814177 1 0
+5814509 DOWN 1
+5814509 0 0
+5832687 UP 2
+5832687 2 0
+~~~
+~~~
+5832716 2 16
+~~~
+~~~
+~~~
+5832721 animal = 1
+5832722 homeRewards = 11
+5832722 outerRewards = 5
+~~~
+5832849 DOWN 2
+5832849 0 16
+5832888 UP 2
+5832888 2 16
+5833016 2 0
+5837990 DOWN 2
+5837990 0 0
+5838024 UP 2
+5838024 2 0
+5838127 DOWN 2
+5838126 0 0
+5839432 UP 2
+5839432 2 0
+5841094 DOWN 2
+5841094 0 0
+5858860 UP 3
+5858860 4 0
+~~~
+~~~
+5858893 4 32
+~~~
+~~~
+~~~
+5858898 animal = 1
+5858899 homeRewards = 11
+5858899 outerRewards = 6
+~~~
+5859193 4 0
+5866618 DOWN 3
+5866618 0 0
+5866638 UP 3
+5866638 4 0
+5866746 DOWN 3
+5866746 0 0
+5866809 UP 3
+5866809 4 0
+5866906 DOWN 3
+5866906 0 0
+5867070 UP 3
+5867070 4 0
+5869228 DOWN 3
+5869228 0 0
+5884318 UP 2
+5884318 2 0
+~~~
+~~~
+5884347 2 16
+~~~
+~~~
+~~~
+5884352 animal = 1
+5884352 homeRewards = 12
+5884353 outerRewards = 6
+~~~
+5884479 DOWN 2
+5884479 0 16
+5884510 UP 2
+5884510 2 16
+5884647 2 0
+5887827 DOWN 2
+5887827 0 0
+5887836 UP 2
+5887836 2 0
+5889190 DOWN 2
+5889190 0 0
+5889236 UP 2
+5889236 2 0
+5889312 DOWN 2
+5889312 0 0
+5902014 UP 1
+5902014 1 0
+~~~
+~~~
+5902053 1 8
+~~~
+~~~
+~~~
+5902058 animal = 1
+5902058 homeRewards = 12
+5902059 outerRewards = 7
+~~~
+5902241 DOWN 1
+5902241 0 8
+5902249 UP 1
+5902249 1 8
+5902353 1 0
+5913200 DOWN 1
+5913200 0 0
+5914232 UP 1
+5914232 1 0
+5914545 DOWN 1
+5914545 0 0
+5929930 UP 3
+5929930 4 0
+5930275 DOWN 3
+5930275 0 0
+5930290 UP 3
+5930290 4 0
+5930721 DOWN 3
+5930721 0 0
+5930781 UP 3
+5930781 4 0
+5930816 DOWN 3
+5930816 0 0
+5933448 UP 3
+5933448 4 0
+5933637 DOWN 3
+5933637 0 0
+5944928 UP 2
+5944928 2 0
+~~~
+~~~
+5944962 2 16
+~~~
+~~~
+~~~
+5944967 animal = 1
+5944968 homeRewards = 13
+5944968 outerRewards = 7
+~~~
+5945101 DOWN 2
+5945101 0 16
+5945144 UP 2
+5945144 2 16
+5945262 2 0
+5949799 DOWN 2
+5949799 0 0
+5949822 UP 2
+5949822 2 0
+5949940 DOWN 2
+5949940 0 0
+5949984 UP 2
+5949984 2 0
+5950078 DOWN 2
+5950078 0 0
+5950154 UP 2
+5950154 2 0
+5950179 DOWN 2
+5950179 0 0
+5958548 UP 1
+5958548 1 0
+~~~
+~~~
+5958585 1 8
+~~~
+~~~
+~~~
+5958590 animal = 1
+5958590 homeRewards = 13
+5958591 outerRewards = 8
+~~~
+5958885 1 0
+5968623 DOWN 1
+5968623 0 0
+5969896 UP 1
+5969896 1 0
+5970448 DOWN 1
+5970448 0 0
+5988809 UP 2
+5988809 2 0
+~~~
+~~~
+5988839 2 16
+~~~
+~~~
+~~~
+5988844 animal = 1
+5988845 homeRewards = 14
+5988845 outerRewards = 8
+~~~
+5989139 2 0
+5993644 DOWN 2
+5993644 0 0
+5993660 UP 2
+5993660 2 0
+5994336 DOWN 2
+5994336 0 0
+6006038 UP 1
+6006038 1 0
+6010332 DOWN 1
+6010332 0 0
+6010360 UP 1
+6010360 1 0
+6010451 DOWN 1
+6010451 0 0
+6010466 UP 1
+6010466 1 0
+6012966 DOWN 1
+6012966 0 0
+6026880 UP 2
+6026880 2 0
+~~~
+~~~
+6026914 2 16
+~~~
+~~~
+~~~
+6026919 animal = 1
+6026919 homeRewards = 15
+6026920 outerRewards = 8
+~~~
+6027061 DOWN 2
+6027061 0 16
+6027098 UP 2
+6027098 2 16
+6027214 2 0
+6031574 DOWN 2
+6031574 0 0
+6031598 UP 2
+6031598 2 0
+6031713 DOWN 2
+6031713 0 0
+6048061 UP 3
+6048061 4 0
+~~~
+~~~
+6048088 4 32
+~~~
+~~~
+~~~
+6048093 animal = 1
+6048094 homeRewards = 15
+6048094 outerRewards = 9
+~~~
+6048124 DOWN 3
+6048124 0 32
+6048197 UP 3
+6048197 4 32
+6048388 4 0
+6057191 DOWN 3
+6057191 0 0
+6057237 UP 3
+6057237 4 0
+6057369 DOWN 3
+6057369 0 0
+6057425 UP 3
+6057425 4 0
+6057439 DOWN 3
+6057439 0 0
+6057444 UP 3
+6057444 4 0
+6057531 DOWN 3
+6057531 0 0
+6057549 UP 3
+6057549 4 0
+6057699 DOWN 3
+6057699 0 0
+6057705 UP 3
+6057705 4 0
+6057911 DOWN 3
+6057911 0 0
+6057942 UP 3
+6057942 4 0
+6057979 DOWN 3
+6057979 0 0
+6058056 UP 3
+6058056 4 0
+6060618 DOWN 3
+6060618 0 0
+6063116 UP 3
+6063116 4 0
+6063158 DOWN 3
+6063158 0 0
+6063950 UP 3
+6063950 4 0
+6066064 DOWN 3
+6066064 0 0
+6083935 UP 1
+6083935 1 0
+6084152 DOWN 1
+6084152 0 0
+6084165 UP 1
+6084165 1 0
+6084734 DOWN 1
+6084734 0 0
+6101964 UP 2
+6101964 2 0
+~~~
+~~~
+6101991 2 16
+~~~
+6101993 DOWN 2
+6101993 0 16
+~~~
+~~~
+6101996 animal = 1
+6101996 homeRewards = 16
+6101997 outerRewards = 9
+~~~
+6102013 UP 2
+6102013 2 16
+6102164 DOWN 2
+6102164 0 16
+6102174 UP 2
+6102174 2 16
+6102176 DOWN 2
+6102176 0 16
+6102213 UP 2
+6102213 2 16
+6102291 2 0
+6106643 DOWN 2
+6106643 0 0
+6106658 UP 2
+6106658 2 0
+6106771 DOWN 2
+6106771 0 0
+6140700 UP 3
+6140700 4 0
+~~~
+~~~
+6140742 4 32
+~~~
+~~~
+~~~
+6140747 animal = 1
+6140748 homeRewards = 16
+6140748 outerRewards = 10
+~~~
+6141042 4 0
+6147326 DOWN 3
+6147326 0 0
+6147378 UP 3
+6147378 4 0
+6147450 DOWN 3
+6147450 0 0
+6149226 UP 3
+6149226 4 0
+6149485 DOWN 3
+6149485 0 0
+6151173 UP 3
+6151173 4 0
+6152365 DOWN 3
+6152365 0 0

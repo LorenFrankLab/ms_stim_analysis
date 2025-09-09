@@ -1,0 +1,20 @@
+<General>
+camera resolution: 692x640
+
+<Linearization Object>
+
+<Rangeline Object>
+
+<Zone Objects>
+
+<Inclusion Zone Object> 1
+<Start settings>
+Description: Inclusion Zone geometry
+<polygon settings>
+Zone id: 0
+nodes_x: 0.525575 0.503836 0.503836 0.686701 0.689258
+nodes_y: 0.675532 0.792553 0.98227 0.996454 0.677305
+<End settings>
+
+<Exclusion Zone Objects>
+
