@@ -106,3 +106,17 @@ We also plan to release a Docker image that includes:
 |  | F | [place_field_table_plots.ipynb](notebooks/Spiking/place_field_table_plots.ipynb) |
 |  | G | [decoding_stim_max_ahead_behind_choice_point.ipynb](notebooks/Decoding/decoding_stim_max_ahead_behind_choice_point.ipynb)|
 | S4 | * | [ahead_behind_spectrum.ipynb](notebooks/Decoding/ahead_behind_spectrum.ipynb) |
+
+### [Rat alias table](src/ms_stim_analysis/Style/style_guide.py)
+
+| Animal | Alias | Targeted |
+| ------ | ----- | -------- |
+| Winnie | V | 1 |
+| Frodo  | F | 1 |
+| Totoro | T | 1 |
+| Banner | B | 1 |
+| Odins  | O | 1 |
+| Wallie | W | 0 |
+| Olive  | L | 0 |
+| Yoshi  | Y | 0 |
+| Bilbo  | I | 0 |
