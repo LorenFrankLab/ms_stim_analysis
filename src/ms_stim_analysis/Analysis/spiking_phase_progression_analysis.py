@@ -6,8 +6,8 @@ import scipy.signal
 
 from spyglass.common import (
     PositionIntervalMap,
-    interval_list_contains,
 )
+from spyglass.common.common_interval import Interval
 from spyglass.position.v1 import TrodesPosV1
 from spyglass.lfp.analysis.v1 import LFPBandV1
 from spyglass.spikesorting import CuratedSpikeSorting
@@ -96,7 +96,7 @@ def phase_progression_analysis(
             spike_pos = []
             for ii, spikes in tqdm(enumerate(spike_df.spike_times)):
                 # find position time bin of each spike
-                spikes = interval_list_contains(restrict_interval, spikes)
+                spikes = Interval(restrict_interval).contains(spikes)
                 spike_ind = np.digitize(
                     spikes,
                     pos_time,
@@ -119,10 +119,8 @@ def phase_progression_analysis(
             spike_phase = []
             for spikes in tqdm(spike_df.spike_times):
                 # find phase time bin of each spike
-                spikes = interval_list_contains(restrict_interval, spikes)
-                spikes = interval_list_contains(
-                    [[phase_time[0], phase_time[-1]]], spikes
-                )
+                spikes = Interval(restrict_interval).contains(spikes)
+                spikes = Interval([[phase_time[0], phase_time[-1]]]).contains(spikes)
                 spike_ind = np.digitize(spikes, phase_time, right=False)
                 spike_phase.append((phase_[spike_ind] + np.pi) % (2 * np.pi))
             spike_phase_list[i].extend(spike_phase)

@@ -3,12 +3,10 @@ from typing import List
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from spyglass.common import (
-    interval_list_contains,
-    interval_list_intersect,
-    interval_list_contains_ind,
     PositionIntervalMap,
     TaskEpoch,
 )
+from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 
 
@@ -52,14 +50,14 @@ def unit_autocorrelegram(
     # This is valid_bin_counts
     if valid_interval is not None:
         valid_bin_index = absolute_bin_index[
-            interval_list_contains_ind(valid_interval, absolute_bin_times)
+            Interval(valid_interval).contains(absolute_bin_times, as_indices=True)
         ]
     else:
         valid_bin_index = absolute_bin_index[:]
     valid_bin_count = np.bincount(valid_bin_index, minlength=bins.size)
     # Get the delay time histogram
     if valid_interval is not None:
-        spike_times = interval_list_contains(valid_interval, spike_times)
+        spike_times = Interval(valid_interval).contains(spike_times)
     delays = np.subtract.outer(spike_times, spike_times)
     # delays = delays[np.tril_indices_from(delays, k=0)] # if only care about positive lags and spikes are monotonically ordered in time
     delays = np.ravel(delays)
@@ -161,10 +159,7 @@ def autocorrelegram(
         ]
 
         for spikes in spike_df:
-            spikes = interval_list_contains(
-                run_intervals,
-                spikes,
-            )
+            spikes = Interval(run_intervals).contains(spikes)
             if spikes.size < min_spikes:
                 continue
             # counts.append(spikes.size)
@@ -174,8 +169,10 @@ def autocorrelegram(
                     test_interval,
                 ]
             ):
-                valid_interval = interval_list_intersect(
-                    np.array(interval), np.array(run_intervals)
+                valid_interval = (
+                    Interval(np.array(interval))
+                    .intersect(np.array(run_intervals))
+                    .times
                 )
                 vals = unit_autocorrelegram(spikes, histogram_bins, valid_interval)
 

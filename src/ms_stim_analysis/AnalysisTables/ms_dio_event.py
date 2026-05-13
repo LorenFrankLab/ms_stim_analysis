@@ -2,10 +2,8 @@ import datajoint as dj
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import spyglass as nd
-from spyglass.common import Nwbfile
-from spyglass.utils.dj_helper_fn import fetch_nwb
-from spyglass.utils.dj_mixin import SpyglassMixin
+from spyglass.common import AnalysisNwbfile, Nwbfile
+from spyglass.utils.dj_mixin import SpyglassMixin, SpyglassMixinPart
 
 from .Utils.datajoint_table_helpers import (
     insert_analysis_table_entry,
@@ -26,7 +24,7 @@ class DioEvents(SpyglassMixin, dj.Computed):
     # DIO events recorded at full sampling rate
     -> TaskIdentification
     ---
-    -> nd.common.AnalysisNwbfile
+    -> AnalysisNwbfile
     dio_events_object_id : varchar(40)
     """
 
@@ -64,14 +62,6 @@ class DioEvents(SpyglassMixin, dj.Computed):
         # Store
         insert_analysis_table_entry(self, [dio_event_df], key)
 
-    def fetch_nwb(self, *attrs, **kwargs):
-        return fetch_nwb(
-            self,
-            (nd.common.AnalysisNwbfile, "analysis_file_abs_path"),
-            *attrs,
-            **kwargs,
-        )
-
     def fetch1_dataframe(self):
         return fetch1_dataframe(self, "dio_events").set_index("dio_int")
 
@@ -94,31 +84,23 @@ class DioEvents(SpyglassMixin, dj.Computed):
 
 
 @schema
-class ProcessedDioEvents(dj.Computed):
+class ProcessedDioEvents(SpyglassMixin, dj.Computed):
     definition = """
     # Processed DIO events
     -> DioEvents
     ---
-    -> nd.common.AnalysisNwbfile
+    -> AnalysisNwbfile
     processed_dio_events_object_id : varchar(40)
     """
 
-    class Stim(dj.Part):
+    class Stim(SpyglassMixinPart):
         definition = """
         # Opto stim events
         -> ProcessedDioEvents
         ---
-        -> nd.common.AnalysisNwbfile
+        -> AnalysisNwbfile
         stim_object_id : varchar(40)
         """
-
-        def fetch_nwb(self, *attrs, **kwargs):
-            return fetch_nwb(
-                self,
-                (nd.common.AnalysisNwbfile, "analysis_file_abs_path"),
-                *attrs,
-                **kwargs,
-            )
 
         def fetch1_dataframe(self):
             return fetch1_dataframe(self, object_name="stim").set_index(
@@ -132,22 +114,14 @@ class ProcessedDioEvents(dj.Computed):
                 self, leave_out_object_id, unpack_single_object_id
             )
 
-    class StimUp(dj.Part):
+    class StimUp(SpyglassMixinPart):
         definition = """
         # Opto stim up events
         -> ProcessedDioEvents
         ---
-        -> nd.common.AnalysisNwbfile
+        -> AnalysisNwbfile
         stim_up_object_id : varchar(40)
         """
-
-        def fetch_nwb(self, *attrs, **kwargs):
-            return fetch_nwb(
-                self,
-                (nd.common.AnalysisNwbfile, "analysis_file_abs_path"),
-                *attrs,
-                **kwargs,
-            )
 
         def fetch1_dataframe(self):
             return fetch1_dataframe(self, object_name="stim_up").set_index(
@@ -161,22 +135,14 @@ class ProcessedDioEvents(dj.Computed):
                 self, leave_out_object_id, unpack_single_object_id
             )
 
-    class StimDown(dj.Part):
+    class StimDown(SpyglassMixinPart):
         definition = """
         # Opto stim up events
         -> ProcessedDioEvents
         ---
-        -> nd.common.AnalysisNwbfile
+        -> AnalysisNwbfile
         stim_down_object_id : varchar(40)
         """
-
-        def fetch_nwb(self, *attrs, **kwargs):
-            return fetch_nwb(
-                self,
-                (nd.common.AnalysisNwbfile, "analysis_file_abs_path"),
-                *attrs,
-                **kwargs,
-            )
 
         def fetch1_dataframe(self):
             return fetch1_dataframe(self, object_name="stim_down").set_index(
@@ -453,14 +419,6 @@ class ProcessedDioEvents(dj.Computed):
             "Populated ProcessedDioEvents.Pumps for file {nwb_file_name}, epoch {epoch}".format(
                 **key
             )
-        )
-
-    def fetch_nwb(self, *attrs, **kwargs):
-        return fetch_nwb(
-            self,
-            (nd.common.AnalysisNwbfile, "analysis_file_abs_path"),
-            *attrs,
-            **kwargs,
         )
 
     def fetch1_dataframe(self):

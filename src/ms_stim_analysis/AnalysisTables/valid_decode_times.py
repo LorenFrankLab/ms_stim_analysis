@@ -1,7 +1,7 @@
 import datajoint as dj
 import numpy as np
 
-from spyglass.common import interval_list_contains
+from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.utils.dj_mixin import SpyglassMixin
 
@@ -103,7 +103,7 @@ class ClusterlessValidDecodeTimes(SpyglassMixin, dj.Computed):
         stim_time = stim_time[stim == 1]
         # restrict to stims in valid_runs
         run_intervals = key["opto_valid_decode_times"]
-        valid_stims = interval_list_contains(np.array(run_intervals), stim_time)
+        valid_stims = Interval(np.array(run_intervals)).contains(stim_time)
         valid_stims = [
             s
             for s in valid_stims

@@ -10,8 +10,6 @@ from spyglass.common import (
     PositionIntervalMap,
     TaskEpoch,
     convert_epoch_interval_name_to_position_interval_name,
-    interval_list_contains,
-    interval_list_intersect,
 )
 from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
@@ -174,8 +172,8 @@ def opto_spiking_dynamics(
             cycle_start_intervals = []
             for t in cycle_start:
                 cycle_start_intervals.append([t, t + 1])
-            pulse_timepoints = interval_list_contains(
-                cycle_start_intervals, pulse_timepoints
+            pulse_timepoints = Interval(cycle_start_intervals).contains(
+                pulse_timepoints
             )
         elif "dummy_cycle" in marks:
             dummy_freq = int(marks.split("=")[-1])
@@ -221,7 +219,7 @@ def opto_spiking_dynamics(
         # get histogram spike counts
         for unit_spikes in spikes:
             unit_spikes_restricted = np.unique(
-                interval_list_contains(interval_restrict, unit_spikes)
+                Interval(interval_restrict).contains(unit_spikes)
             )
             vals = bin_spikes_around_marks(
                 unit_spikes_restricted, pulse_timepoints, plot_rng
@@ -233,7 +231,7 @@ def opto_spiking_dynamics(
             #     )
             # break
             unit_spikes_restricted = np.unique(
-                interval_list_contains(interval_restrict_shuffle, unit_spikes)
+                Interval(interval_restrict_shuffle).contains(unit_spikes)
             )
 
             def alligned_binned_spike_func(marks):
@@ -586,8 +584,8 @@ def opto_spiking_dynamics_place_dependence(
             cycle_start_intervals = []
             for t in cycle_start:
                 cycle_start_intervals.append([t, t + 1])
-            pulse_timepoints = interval_list_contains(
-                cycle_start_intervals, pulse_timepoints
+            pulse_timepoints = Interval(cycle_start_intervals).contains(
+                pulse_timepoints
             )
         elif "dummy_cycle" in marks:
             dummy_freq = int(marks.split("=")[-1])
@@ -644,8 +642,8 @@ def opto_spiking_dynamics_place_dependence(
                     marks_counts_list[n_pos].append(len(pulse_ind))
                     continue
 
-                unit_spikes_restricted = interval_list_contains(
-                    interval_restrict, unit_spikes
+                unit_spikes_restricted = Interval(interval_restrict).contains(
+                    unit_spikes
                 )
                 vals = bin_spikes_around_marks(
                     unit_spikes_restricted, pulse_timepoints[pulse_ind], plot_rng
@@ -657,8 +655,8 @@ def opto_spiking_dynamics_place_dependence(
                 #         vals, int(gauss_smooth / np.mean(np.diff(histogram_bins)))
                 #     )
                 # break
-                unit_spikes_restricted = interval_list_contains(
-                    interval_restrict_shuffle, unit_spikes
+                unit_spikes_restricted = Interval(interval_restrict_shuffle).contains(
+                    unit_spikes
                 )
 
                 def alligned_binned_spike_func(marks):
@@ -1040,8 +1038,10 @@ def spiking_theta_distribution(
         # intersect with position-defined intervals
         if filter_ports:
             valid_position_intervals = filter_position_ports(pos_key)
-            run_intervals = interval_list_intersect(
-                np.array(run_intervals), np.array(valid_position_intervals)
+            run_intervals = (
+                Interval(np.array(run_intervals))
+                .intersect(np.array(valid_position_intervals))
+                .times
             )
 
         # define the test and control intervals
@@ -1051,7 +1051,7 @@ def spiking_theta_distribution(
             (OptoStimProtocol() & pos_key).fetch1("test_intervals"),
         ]
         restrict_interval_list = [
-            interval_list_intersect(np.array(restrict_interval), run_intervals)
+            Interval(np.array(restrict_interval)).intersect(run_intervals).times
             for restrict_interval in restrict_interval_list
         ]
 
@@ -1084,10 +1084,8 @@ def spiking_theta_distribution(
             spike_phase = []
             for spikes in tqdm(spike_df.spike_times):
                 # find phase time bin of each spike
-                spikes = interval_list_contains(restrict_interval, spikes)
-                spikes = interval_list_contains(
-                    [[phase_time[0], phase_time[-1]]], spikes
-                )
+                spikes = Interval(restrict_interval).contains(spikes)
+                spikes = Interval([[phase_time[0], phase_time[-1]]]).contains(spikes)
                 spike_ind = np.digitize(spikes, phase_time, right=False)
                 spike_phase.append(phase_[spike_ind])
             spike_phase_list[ii].append(spike_phase)
@@ -1224,7 +1222,7 @@ def place_field_analysis(
             spike_pos = []
             for ii, spikes in tqdm(enumerate(spike_df.spike_times)):
                 # find position time bin of each spike
-                spikes = interval_list_contains(restrict_interval, spikes)
+                spikes = Interval(restrict_interval).contains(spikes)
                 spike_ind = np.digitize(
                     spikes,
                     pos_time,
@@ -1238,9 +1236,7 @@ def place_field_analysis(
         )  # TODO: define more consistently
         occupancy_list = [
             np.histogram(
-                pos_df.position_x[
-                    interval_list_contains(restrict_interval, pos_df.index)
-                ],
+                pos_df.position_x[Interval(restrict_interval).contains(pos_df.index)],
                 bins=rng,
             )[0]
             for restrict_interval in restrict_interval_list
@@ -1475,9 +1471,11 @@ def get_theta_peaks(key):
     if len(valid_position_intervals) == 0:
         return []
     # print("position", valid_position_intervals)
-    run_intervals = interval_list_intersect(
-        np.array(run_intervals), np.array(valid_position_intervals)
+    run_intervals = (
+        Interval(np.array(run_intervals))
+        .intersect(np.array(valid_position_intervals))
+        .times
     )
 
     # return the theta marks from these intervals
-    return interval_list_contains(run_intervals, marks)
+    return Interval(run_intervals).contains(marks)

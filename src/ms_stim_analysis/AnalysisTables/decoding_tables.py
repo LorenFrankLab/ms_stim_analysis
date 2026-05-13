@@ -9,7 +9,8 @@ import os
 from ms_stim_analysis.Analysis.utils import smooth
 
 from non_local_detector.visualization import create_interactive_1D_decoding_figurl
-from spyglass.common import AnalysisNwbfile, interval_list_intersect
+from spyglass.common import AnalysisNwbfile
+from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.clusterless import ClusterlessDecodingV1
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.utils import SpyglassMixin
@@ -291,8 +292,10 @@ class RippleClusterlessDecodeAnalysis(SpyglassMixin, dj.Computed):
                 # int_e = np.digitize(interval[1], valid_intervals[:, 1]) + 1
                 int_s = inter_range_start_list[i]
                 int_e = inter_range_end_list[i]
-                ripple_valid = interval_list_intersect(
-                    np.array([interval]), valid_intervals[int_s:int_e]
+                ripple_valid = (
+                    Interval(np.array([interval]))
+                    .intersect(valid_intervals[int_s:int_e])
+                    .times
                 )
                 ripple_length = interval[1] - interval[0]
                 valid_length = (

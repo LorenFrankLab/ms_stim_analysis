@@ -5,7 +5,7 @@ from typing import Iterable
 
 from spyglass.utils.dj_mixin import SpyglassMixin
 from spyglass.position import PositionOutput
-from spyglass.common import interval_list_contains_ind
+from spyglass.common.common_interval import Interval
 
 import warnings
 
@@ -99,9 +99,8 @@ class LocationTimes(SpyglassMixin, dj.Computed):
         contained_intervals = (self & key).fetch1("intervals")
 
         fig, ax = plt.subplots()
-        contained_indices = interval_list_contains_ind(
-            contained_intervals,
-            pos_df.index.values,
+        contained_indices = Interval(contained_intervals).contains(
+            pos_df.index.values, as_indices=True
         )
         plt.scatter(pos_df.position_x, pos_df.position_y, c="cornflowerblue", s=10)
         plt.scatter(

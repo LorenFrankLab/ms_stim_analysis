@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import spyglass as nd
+from spyglass.common import AnalysisNwbfile
 import copy
 
 from .vector_helpers import unpack_single_element
@@ -9,8 +9,8 @@ from .vector_helpers import unpack_single_element
 def create_analysis_nwbf(key, nwb_objects, nwb_object_names):
     # Make copy of key to avoid altering key outside function
     key = copy.deepcopy(key)
-    key["analysis_file_name"] = nd.common.AnalysisNwbfile().create(key["nwb_file_name"])
-    nwb_analysis_file = nd.common.AnalysisNwbfile()
+    key["analysis_file_name"] = AnalysisNwbfile().create(key["nwb_file_name"])
+    nwb_analysis_file = AnalysisNwbfile()
     # Check that objects all dfs (code currently assumes this in defining table_name)
     if not all([isinstance(x, pd.DataFrame) for x in nwb_objects]):
         raise Exception("create_analysis_nwbf currently assumes all objects dfs")

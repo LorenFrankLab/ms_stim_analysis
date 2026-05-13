@@ -9,7 +9,7 @@ from ms_stim_analysis.AnalysisTables.ms_task_performance import (
 from ms_stim_analysis.Analysis.position_analysis import filter_position_ports
 
 from spyglass.utils.dj_mixin import SpyglassMixin
-from spyglass.common import interval_list_intersect
+from spyglass.common.common_interval import Interval
 
 import warnings
 
@@ -49,8 +49,10 @@ class TrialIntervals(SpyglassMixin, dj.Computed):
         trial_durations = []
         trial_intervals = []
         for i in range(poke_times.size - 1):
-            travel_ = interval_list_intersect(
-                np.array([[poke_times[i], poke_times[i + 1]]]), travel_intervals
+            travel_ = (
+                Interval(np.array([[poke_times[i], poke_times[i + 1]]]))
+                .intersect(travel_intervals)
+                .times
             )
             # if not len(travel_) == 1:
             #     raise ValueError("A trial should have exactly one interval")

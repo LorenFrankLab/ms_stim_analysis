@@ -5,10 +5,8 @@ from scipy.signal import find_peaks
 from spyglass.common import (
     PositionIntervalMap,
     TaskEpoch,
-    interval_list_contains,
-    interval_list_contains_ind,
-    interval_list_intersect,
 )
+from spyglass.common.common_interval import Interval
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
 from spyglass.spikesorting.v0 import CuratedSpikeSorting
 from tqdm import tqdm
@@ -344,10 +342,7 @@ def crosscorrelegram(
         print("number_units", len(spike_df))
         # loop through unit pairs
         for n_s1, spikes in enumerate(spike_df):
-            spikes = interval_list_contains(
-                run_intervals,
-                spikes,
-            )
+            spikes = Interval(run_intervals).contains(spikes)
             if spikes.size < min_spikes:
                 continue
 
@@ -355,17 +350,21 @@ def crosscorrelegram(
             # print("spikes", spikes.size)
             for interval in [control_interval, test_interval]:
                 bins = histogram_bins[:-1] + np.diff(histogram_bins) / 2
-                x = interval_list_contains(interval, spikes)
+                x = Interval(interval).contains(spikes)
                 absolute_bin_times = np.add.outer(x, bins).ravel()
                 absolute_bin_index = np.array(
                     [np.arange(bins.size) for _ in range(x.size)]
                 ).ravel()
-                valid_interval = interval_list_intersect(
-                    np.array(interval), np.array(run_intervals)
+                valid_interval = (
+                    Interval(np.array(interval))
+                    .intersect(np.array(run_intervals))
+                    .times
                 )
                 valid_interval = interval
                 valid_bin_index = absolute_bin_index[
-                    interval_list_contains_ind(valid_interval, absolute_bin_times)
+                    Interval(valid_interval).contains(
+                        absolute_bin_times, as_indices=True
+                    )
                 ]
                 valid_bin_count.append(
                     np.bincount(valid_bin_index, minlength=bins.size)
@@ -384,10 +383,7 @@ def crosscorrelegram(
                 # skip auto correlegrams
                 if n_s1 == n_s2:
                     continue
-                spikes_2 = interval_list_contains(
-                    run_intervals,
-                    spikes_2,
-                )
+                spikes_2 = Interval(run_intervals).contains(spikes_2)
                 if spikes_2.size < min_spikes:
                     continue
 
@@ -397,8 +393,8 @@ def crosscorrelegram(
                         test_interval,
                     ]
                 ):
-                    x = interval_list_contains(interval, spikes)
-                    x2 = interval_list_contains(interval, spikes_2)
+                    x = Interval(interval).contains(spikes)
+                    x2 = Interval(interval).contains(spikes_2)
 
                     # get the correlegram count
                     delays = np.subtract.outer(x, x2)
@@ -534,28 +530,22 @@ def crosscorrelegram_stimulus_only(
         stimulating_intervals = np.array(
             [[s - 0.02, e + 0.02] for s, e in zip(t_on, t_off)]
         )
-        run_intervals_stim_only = interval_list_intersect(
-            np.array(run_intervals), stimulating_intervals
+        run_intervals_stim_only = (
+            Interval(np.array(run_intervals)).intersect(stimulating_intervals).times
         )
 
         histogram_bins = np.arange(-0.1, 0.1, 0.0001)
         print("number_units", len(spike_df.spike_times.values))
 
         for n_s1, spikes in enumerate(spike_df.spike_times.values):
-            spikes = interval_list_contains(
-                run_intervals_stim_only,
-                spikes,
-            )
+            spikes = Interval(run_intervals_stim_only).contains(spikes)
             if spikes.size < min_spikes:
                 continue
 
             for n_s2, spikes_2 in enumerate(spike_df.spike_times.values):
                 if n_s1 == n_s2:
                     continue
-                spikes_2 = interval_list_contains(
-                    run_intervals_stim_only,
-                    spikes_2,
-                )
+                spikes_2 = Interval(run_intervals_stim_only).contains(spikes_2)
                 if spikes_2.size < min_spikes:
                     continue
 
@@ -565,8 +555,8 @@ def crosscorrelegram_stimulus_only(
                         test_interval,
                     ]
                 ):
-                    x = interval_list_contains(interval, spikes)
-                    x2 = interval_list_contains(interval, spikes_2)
+                    x = Interval(interval).contains(spikes)
+                    x2 = Interval(interval).contains(spikes_2)
 
                     delays = np.subtract.outer(x, x2)
                     delays = delays[delays < histogram_bins[-1]]
@@ -587,9 +577,9 @@ def crosscorrelegram_stimulus_only(
                         / np.sum(
                             [
                                 e - s
-                                for s, e in interval_list_intersect(
-                                    np.array(interval), run_intervals_stim_only
-                                )
+                                for s, e in Interval(np.array(interval))
+                                .intersect(run_intervals_stim_only)
+                                .times
                             ]
                         )
                     )
@@ -720,10 +710,7 @@ def spike_lag_vs_position(
         print("number_units", len(spike_df))
         # loop through unit pairs
         for n_s1, spikes in enumerate(spike_df):
-            spikes = interval_list_contains(
-                run_intervals,
-                spikes,
-            )
+            spikes = Interval(run_intervals).contains(spikes)
             if spikes.size < min_spikes:
                 continue
 
@@ -738,10 +725,7 @@ def spike_lag_vs_position(
                 # skip auto correlegrams
                 if n_s1 == n_s2:
                     continue
-                spikes_2 = interval_list_contains(
-                    run_intervals,
-                    spikes_2,
-                )
+                spikes_2 = Interval(run_intervals).contains(spikes_2)
                 if spikes_2.size < min_spikes:
                     continue
 
@@ -751,8 +735,8 @@ def spike_lag_vs_position(
                         test_interval,
                     ]
                 ):
-                    x = interval_list_contains(interval, spikes)
-                    x2 = interval_list_contains(interval, spikes_2)
+                    x = Interval(interval).contains(spikes)
+                    x2 = Interval(interval).contains(spikes_2)
 
                     delays = np.subtract.outer(x, x2)
                     ref_times = np.subtract.outer(x, np.zeros_like(x2))

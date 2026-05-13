@@ -6,11 +6,9 @@ from tqdm import tqdm
 from spyglass.common import (
     AnalysisNwbfile,
     IntervalList,
-    interval_list_contains,
-    interval_list_contains_ind,
-    interval_list_intersect,
     convert_epoch_interval_name_to_position_interval_name,
 )
+from spyglass.common.common_interval import Interval
 from spyglass.spikesorting.analysis.v1.group import SortedSpikesGroup
 from spyglass.utils.dj_mixin import SpyglassMixin
 from ms_stim_analysis.Analysis.utils import get_running_valid_intervals, parse_unit_ids
@@ -150,22 +148,19 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
             ]
         )
         entry_interval = np.array((IntervalList & key).fetch1("valid_times"))
-        valid_interval = interval_list_intersect(run_intervals, entry_interval)
+        valid_interval = Interval(run_intervals).intersect(entry_interval).times
 
         results = []
         histogram_bins = np.arange(-max_lag, max_lag, 0.0005)
         print("number_units", len(spikes_list))
         # loop through unit pairs
         for n_s1, (spikes, unit_id_1) in tqdm(enumerate(zip(spikes_list, unit_ids))):
-            spikes = interval_list_contains(
-                run_intervals,
-                spikes,
-            )
+            spikes = Interval(run_intervals).contains(spikes)
 
             # print("spikes", spikes.size)
             # for interval in [control_interval, test_interval]:
             bins = histogram_bins[:-1] + np.diff(histogram_bins) / 2
-            x = interval_list_contains(valid_interval, spikes)
+            x = Interval(valid_interval).contains(spikes)
             if x.size == 0:
                 continue
             absolute_bin_times = np.add.outer(x, bins).ravel()
@@ -173,16 +168,13 @@ class CrossCorrelogram(SpyglassMixin, dj.Computed):
                 [np.arange(bins.size) for _ in range(x.size)]
             ).ravel()
             valid_bin_index = absolute_bin_index[
-                interval_list_contains_ind(valid_interval, absolute_bin_times)
+                Interval(valid_interval).contains(absolute_bin_times, as_indices=True)
             ]
             valid_bin_count = np.bincount(valid_bin_index, minlength=bins.size)
 
             for n_s2, (spikes_2, unit_id_2) in enumerate(zip(spikes_list, unit_ids)):
                 # skip auto correlograms
-                spikes_2 = interval_list_contains(
-                    valid_interval,
-                    spikes_2,
-                )
+                spikes_2 = Interval(valid_interval).contains(spikes_2)
 
                 # rename from adapting older code
                 x = spikes

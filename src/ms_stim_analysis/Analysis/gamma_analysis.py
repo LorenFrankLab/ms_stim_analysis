@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 from spyglass.common import Session
 
-from spyglass.common.common_interval import interval_list_contains
+from spyglass.common.common_interval import Interval
 from spyglass.lfp.analysis.v1 import LFPBandV1
 
 from .utils import (
@@ -102,7 +102,7 @@ def gamma_theta_nesting(
                 [power_opto, power_control],
                 [phase_opto, phase_control],
             ):
-                valid_times = interval_list_contains(intervals, phase_timestamps)
+                valid_times = Interval(intervals).contains(phase_timestamps)
                 ind_power = np.digitize(valid_times, power_timestamps)
                 power.extend(power_[ind_power - 1])
                 ind_phase = np.digitize(valid_times, phase_timestamps)

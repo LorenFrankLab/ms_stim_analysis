@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from spyglass.common import PositionIntervalMap
-from spyglass.common import interval_list_contains_ind
+from spyglass.common.common_interval import Interval
 
 
 from ms_stim_analysis.AnalysisTables.ms_opto_stim_protocol import OptoStimProtocol
@@ -76,7 +76,7 @@ def spiking_autocorrelation(
         ):
             for interval in interval_list:
                 for i, (t, counts) in enumerate(zip(times, spike_counts)):
-                    ind = interval_list_contains_ind(np.array([interval]), t)
+                    ind = Interval(np.array([interval])).contains(t, as_indices=True)
                     if ind.size >= auto_corr_window:
                         counts_interval = smooth(counts[:, ind].T, 3)
                         C[cond][i].append(

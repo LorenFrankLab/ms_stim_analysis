@@ -12,8 +12,8 @@ import pandas as pd
 from spyglass.common import (
     AnalysisNwbfile,
     IntervalList,
-    interval_list_contains,
 )
+from spyglass.common.common_interval import Interval
 import xarray as xr
 
 from spyglass.decoding.v1.sorted_spikes import SortedSpikesDecodingV1
@@ -122,7 +122,7 @@ class OptoPlaceField(SpyglassMixin, dj.Computed):
                 IntervalList & data_key & {"interval_list_name": encode_interval}
             ).fetch1("valid_times")
             encoding_spike_counts.append(
-                [len(interval_list_contains(encode_times, s)) for s in spikes]
+                [len(Interval(encode_times).contains(s)) for s in spikes]
             )
 
             # get information rates
